@@ -96,7 +96,14 @@ Mensagens de log são chaves estáveis (`webhook.olx.lead`); o que varia vai em 
 
 ## Dados sensíveis
 
-Por padrão, headers como `authorization` e `cookie`, e chaves com `password`, `senha`, `token`, `secret`, `apiKey`, `cpf`, `card` ou `cvv` (no corpo, na query, na URL e nos atributos) saem mascarados com uma impressão digital: `Bearer eyJh…5x9Q #a1b2c3d4`. Dá para ver se veio, qual era e se dois valores são iguais, sem guardar o valor.
+Com `redact: 'mask'` (padrão), o SDK mascara antes de enviar:
+
+- headers e chaves (no corpo, na query, nos parâmetros da rota, no caminho da URL e nos atributos) cujo nome tenha uma destas palavras: `password`, `senha`, `secret`, `token`, `auth`, `authorization`, `cookie`, `apikey`, `api key`, `private key`, `access key`, `signature`, `jwt`, `session`, `credential`, `cpf`, `card`, `cvv`, `cvc`, `pin`, `otp`, além da chave `key` sozinha e dos headers `x-…-key`, `x-…-secret` e `x-…-token`. A comparação é por palavra: `cardio` e `passos` não são mascarados;
+- qualquer valor com cara de credencial (`Bearer …`, `Basic …`, JWT), seja qual for a chave.
+
+Tokens e chaves saem como `Bearer eyJh…5x9Q #a1b2c3d4`: dá para ver se veio, qual era e se dois valores são iguais. Senhas, CPF, cartão, CVV, PIN e OTP saem só como `••• #a1b2c3d4`, sem nenhum pedaço do valor. A impressão digital é um HMAC com chave derivada da chave do projeto, então não dá para descobrir o valor por força bruta sem ela.
+
+`redact: 'none'` (no `init` ou por chamada de `logRequest`) guarda os valores inteiros.
 
 ## Trecho de código nos erros
 

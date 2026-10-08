@@ -34,7 +34,7 @@ describe('requestInfo', () => {
       'user-agent': 'OLX-Webhook/2',
       'x-list': 'a, b',
     });
-    expect(info.body).toEqual({ name: 'Ana', password: expect.stringMatching(/^supe…word #[0-9a-f]{8}$/) });
+    expect(info.body).toEqual({ name: 'Ana', password: expect.stringMatching(/^••• #[0-9a-f]{8}$/) });
   });
 
   it('keeps everything with redact none', () => {

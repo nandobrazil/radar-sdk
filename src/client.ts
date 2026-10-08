@@ -16,7 +16,8 @@ import {
   type RuntimeInfo,
   type UserInfo,
 } from './protocol/index.js';
-import { requestInfo, requestPath, requestRoute } from './request.js';
+import { redactPath, requestInfo, requestPath, requestRoute } from './request.js';
+import { setFingerprintSecret } from './redact.js';
 import { prepareAttrs, truncate } from './serialize.js';
 import { enrichException } from './source.js';
 import { exceptionInfo } from './stack.js';
@@ -52,6 +53,7 @@ export class RadarClient {
       }
       this.initialized = true;
       this.options = resolveOptions(options);
+      setFingerprintSecret(this.options.key);
       if (this.options.enabled && this.options.key) {
         this.transport = new Transport({
           url: this.options.endpoint + INGEST_PATH,
@@ -148,7 +150,7 @@ export class RadarClient {
         this.emitLog(level, 'http.request', {
           method: (req.method ?? 'GET').toUpperCase(),
           ...(route ? { route } : {}),
-          path: requestPath(req),
+          path: redactPath(requestPath(req), req.params, this.options.redact),
           status,
           durationMs: elapsedSince(context.startedAt),
         }),

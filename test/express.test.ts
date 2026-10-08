@@ -72,7 +72,7 @@ describe('middleware', () => {
     });
     expect(event.request!.url).not.toContain('abcdefghijklmnop');
     expect(event.request!.headers!.authorization).toMatch(/^Bearer eyJh…\.sig #[0-9a-f]{8}$/);
-    expect((event.request!.body as { password: string }).password).toMatch(/^supe…word #/);
+    expect((event.request!.body as { password: string }).password).toMatch(/^••• #/);
   });
 
   it('never sends raw binary bodies', async () => {

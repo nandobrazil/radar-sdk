@@ -1,8 +1,7 @@
-import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { fingerprint, isSensitiveHeader, isSensitiveKey, maskValue, redactDeep } from '../src/redact.js';
 
-const digest = (value: string) => createHash('sha256').update(value).digest('hex').slice(0, 8);
+const digest = (value: string) => fingerprint(value);
 
 describe('maskValue', () => {
   it('keeps the scheme and the edges of a bearer token', () => {
@@ -46,7 +45,7 @@ describe('redactDeep', () => {
       items: { apiKey: string }[];
     };
     expect(result.user.name).toBe('Ana');
-    expect(result.user.senha).toMatch(/^1234…2345 #[0-9a-f]{8}$/);
+    expect(result.user.senha).toMatch(/^••• #[0-9a-f]{8}$/);
     expect(result.items[0]!.apiKey).toMatch(/^k-12…0123 #[0-9a-f]{8}$/);
   });
 

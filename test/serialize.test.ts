@@ -75,7 +75,7 @@ describe('prepareAttrs', () => {
   it('masks sensitive keys and keeps the rest', () => {
     const result = prepareAttrs({ password: 'super-secret-password', storeId: 7 }, 'mask');
     expect(result.storeId).toBe(7);
-    expect(result.password).toMatch(/^supe…word #[0-9a-f]{8}$/);
+    expect(result.password).toMatch(/^••• #[0-9a-f]{8}$/);
   });
 
   it('caps the serialized size at 16 KB', () => {

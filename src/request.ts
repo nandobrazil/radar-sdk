@@ -1,7 +1,7 @@
 import type { HeaderValue, RequestLike } from './context.js';
 import type { RedactMode } from './options.js';
 import { LIMITS, type RequestInfo } from './protocol/index.js';
-import { isSensitiveHeader, isSensitiveKey, maskValue, redactDeep } from './redact.js';
+import { isLowEntropyKey, isSensitiveHeader, isSensitiveKey, looksLikeCredential, maskValue, redactDeep } from './redact.js';
 import { limitBytes, sanitize, truncate } from './serialize.js';
 
 export function headerValue(value: HeaderValue): string | undefined {
@@ -17,7 +17,7 @@ export function requestHeaders(headers: Record<string, HeaderValue>, mode: Redac
     if (value === undefined) continue;
     if (count >= LIMITS.headers) break;
     const key = name.toLowerCase();
-    result[key] = mode === 'mask' && isSensitiveHeader(key) ? maskValue(value) : truncate(value);
+    result[key] = mode === 'mask' && (isSensitiveHeader(key) || looksLikeCredential(value)) ? maskValue(value) : truncate(value);
     count++;
   }
   return result;
@@ -34,6 +34,25 @@ export function requestRoute(req: RequestLike, route?: string): string | undefin
   return typeof req.route?.path === 'string' ? req.route.path : undefined;
 }
 
+export function redactPath(path: string, params: Record<string, unknown> | undefined, mode: RedactMode): string {
+  if (mode === 'none' || !params) return path;
+  let result = path;
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value !== 'string' || value.length < 4 || !isSensitiveKey(key)) continue;
+    const masked = maskValue(value, !isLowEntropyKey(key));
+    for (const form of new Set([value, encodeURIComponent(value)])) result = result.split(form).join(masked);
+  }
+  return result;
+}
+
+export function safeUrl(req: RequestLike, mode: RedactMode): string {
+  const url = req.originalUrl ?? req.url ?? '';
+  const queryStart = url.indexOf('?');
+  const path = queryStart >= 0 ? url.slice(0, queryStart) : url;
+  const query = queryStart >= 0 ? url.slice(queryStart) : '';
+  return redactUrl(redactPath(path, req.params, mode) + query, mode);
+}
+
 export function redactUrl(url: string, mode: RedactMode): string {
   const queryStart = url.indexOf('?');
   if (mode === 'none' || queryStart < 0) return url;
@@ -41,7 +60,7 @@ export function redactUrl(url: string, mode: RedactMode): string {
   let changed = false;
   for (const [key, value] of [...params.entries()]) {
     if (isSensitiveKey(key) && value !== '') {
-      params.set(key, maskValue(value));
+      params.set(key, maskValue(value, !isLowEntropyKey(key)));
       changed = true;
     }
   }
@@ -57,7 +76,7 @@ export function requestInfo(req: RequestLike, mode: RedactMode, extra: { route?:
   const ip = req.ip ?? req.socket?.remoteAddress;
   return {
     method: (req.method ?? 'GET').toUpperCase(),
-    url: truncate(redactUrl(req.originalUrl ?? req.url ?? '', mode)),
+    url: truncate(safeUrl(req, mode)),
     ...(route ? { route } : {}),
     ...(params ? { params } : {}),
     ...(query ? { query } : {}),
