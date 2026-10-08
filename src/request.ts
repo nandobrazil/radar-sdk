@@ -1,5 +1,5 @@
 import type { HeaderValue, RequestLike } from './context.js';
-import type { RedactMode } from './options.js';
+import type { RedactMode, RequestDetail } from './options.js';
 import { LIMITS, type RequestInfo } from './protocol/index.js';
 import { isLowEntropyKey, isSensitiveHeader, isSensitiveKey, looksLikeCredential, maskValue, redactDeep } from './redact.js';
 import { limitBytes, sanitize, truncate } from './serialize.js';
@@ -67,8 +67,17 @@ export function redactUrl(url: string, mode: RedactMode): string {
   return changed ? `${url.slice(0, queryStart)}?${params.toString()}` : url;
 }
 
-export function requestInfo(req: RequestLike, mode: RedactMode, extra: { route?: string; status?: number; durationMs?: number } = {}): RequestInfo {
+export function requestInfo(req: RequestLike, mode: RedactMode, extra: { route?: string; status?: number; durationMs?: number } = {}, detail: RequestDetail = 'full'): RequestInfo {
   const route = requestRoute(req, extra.route);
+  if (detail === 'route') {
+    return {
+      method: (req.method ?? 'GET').toUpperCase(),
+      url: route ?? '',
+      ...(route ? { route } : {}),
+      ...(extra.status !== undefined ? { status: extra.status } : {}),
+      ...(extra.durationMs !== undefined ? { durationMs: extra.durationMs } : {}),
+    };
+  }
   const params = prepareRecord(req.params, mode) as Record<string, string> | undefined;
   const query = prepareRecord(req.query, mode);
   const body = prepareBody(req.body, mode);

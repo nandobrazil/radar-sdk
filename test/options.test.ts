@@ -13,6 +13,7 @@ describe('resolveOptions', () => {
       console: false,
       minLevel: 'info',
       redact: 'mask',
+      requestDetail: 'full',
       logRequests: true,
       ignorePaths: ['/healthz', '/health'],
       captureUnhandled: true,

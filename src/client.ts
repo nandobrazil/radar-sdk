@@ -90,7 +90,7 @@ export class RadarClient {
     this.safely(() => {
       const context = currentContext();
       const mode = options.redact ?? this.options.redact;
-      const request = context?.req ? requestInfo(context.req, mode, { route: context.route }) : undefined;
+      const request = context?.req ? requestInfo(context.req, mode, { route: context.route }, this.options.requestDetail) : undefined;
       this.emitLog(options.level ?? 'info', title, data, { request, mode });
     });
   }
@@ -150,7 +150,7 @@ export class RadarClient {
         this.emitLog(level, 'http.request', {
           method: (req.method ?? 'GET').toUpperCase(),
           ...(route ? { route } : {}),
-          path: redactPath(requestPath(req), req.params, this.options.redact),
+          ...(this.options.requestDetail === 'full' ? { path: redactPath(requestPath(req), req.params, this.options.redact) } : {}),
           status,
           durationMs: elapsedSince(context.startedAt),
         }),
@@ -206,7 +206,7 @@ export class RadarClient {
       handled,
       exception: exceptionInfo(error),
       ...(context ? { requestId: context.requestId } : {}),
-      ...(context?.req ? { request: requestInfo(context.req, mode, { route: context.route }) } : {}),
+      ...(context?.req ? { request: requestInfo(context.req, mode, { route: context.route }, this.options.requestDetail) } : {}),
       ...(context?.user ? { user: context.user } : {}),
       runtime: runtimeInfo(),
       ...(data !== undefined ? { attrs: prepareAttrs(data, mode) } : {}),

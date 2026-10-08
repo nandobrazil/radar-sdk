@@ -1,6 +1,7 @@
 import type { LogLevel } from './protocol/index.js';
 
 export type RedactMode = 'mask' | 'none';
+export type RequestDetail = 'full' | 'route';
 
 export type RadarOptions = {
   key?: string;
@@ -11,6 +12,7 @@ export type RadarOptions = {
   console?: boolean;
   minLevel?: LogLevel;
   redact?: RedactMode;
+  requestDetail?: RequestDetail;
   logRequests?: boolean;
   ignorePaths?: string[];
   captureUnhandled?: boolean;
@@ -26,6 +28,7 @@ export type ResolvedOptions = {
   console: boolean;
   minLevel: LogLevel;
   redact: RedactMode;
+  requestDetail: RequestDetail;
   logRequests: boolean;
   ignorePaths: string[];
   captureUnhandled: boolean;
@@ -47,6 +50,7 @@ export function resolveOptions(options: RadarOptions = {}, env: NodeJS.ProcessEn
     console: options.console ?? false,
     minLevel: options.minLevel && LEVELS.includes(options.minLevel) ? options.minLevel : 'info',
     redact: options.redact === 'none' ? 'none' : 'mask',
+    requestDetail: options.requestDetail === 'route' ? 'route' : 'full',
     logRequests: options.logRequests ?? true,
     ignorePaths: options.ignorePaths ?? ['/healthz', '/health'],
     captureUnhandled: options.captureUnhandled ?? true,

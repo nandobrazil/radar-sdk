@@ -106,4 +106,37 @@ describe('middleware', () => {
     await client.flush();
     expect(logs()[0]!.request).toBeUndefined();
   });
+
+  it('sends only the route with requestDetail route', async () => {
+    const minimal = new RadarClient();
+    minimal.init({ key: 'rk_test', endpoint: server.url, environment: 'test', captureUnhandled: false, requestDetail: 'route' });
+    const app = express();
+    app.use(minimal.middleware());
+    app.use(express.json());
+    app.post('/students/:studentId/meals', (_req, res) => {
+      minimal.logRequest('meal.saved');
+      minimal.captureError(new Error('boom'));
+      res.status(500).json({ ok: false });
+    });
+    await request(app)
+      .post('/students/7f3c9a2e-1111-4444-8888-000000000000/meals?date=2026-10-08')
+      .set('authorization', 'Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig')
+      .send({ kcal: 512, notes: 'dados de saúde' })
+      .expect(500);
+    await vi.waitFor(async () => {
+      await minimal.flush();
+      expect(server.events().filter((event) => event.type === 'log' && event.message === 'http.request')).toHaveLength(1);
+    });
+    const sent = JSON.stringify(server.events().map((event) => ({ request: event.request, attrs: event.attrs, message: event.type === 'log' ? event.message : undefined })));
+    expect(sent).not.toContain('7f3c9a2e');
+    expect(sent).not.toContain('2026-10-08');
+    expect(sent).not.toContain('saúde');
+    expect(sent).not.toContain('eyJh');
+    const error = server.events().find((event) => event.type === 'error')!;
+    expect(error.request).toEqual({ method: 'POST', url: '/students/:studentId/meals', route: '/students/:studentId/meals' });
+    const http = logs().find((item) => item.message === 'http.request')!;
+    expect(http.attrs).toMatchObject({ method: 'POST', route: '/students/:studentId/meals', status: 500 });
+    expect(http.attrs).not.toHaveProperty('path');
+    await minimal.close();
+  });
 });

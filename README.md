@@ -75,6 +75,7 @@ app.use(radar.middleware());
 | `radar.track(name, fn, data?)` | mede `fn`, registra sucesso ou falha com `durationMs`, captura e relança o erro |
 | `radar.middleware()` | middleware Express de contexto (`x-request-id`) |
 | `radar.flush(timeoutMs?)` / `radar.close(timeoutMs?)` | envia a fila; `close` também desliga |
+| `radar.settings` | opções em uso (só leitura); `radar.settings.console` diz se o Radar já imprime no stdout, útil para um logger próprio não duplicar linhas |
 
 Mensagens de log são chaves estáveis (`webhook.olx.lead`); o que varia vai em `data`.
 
@@ -89,6 +90,7 @@ Mensagens de log são chaves estáveis (`webhook.olx.lead`); o que varia vai em 
 | `console` | `false` | imprime cada log como JSON no stdout, mesmo sem chave |
 | `minLevel` | `info` | |
 | `redact` | `mask` | `none` guarda tokens e senhas inteiros |
+| `requestDetail` | `full` | `route` manda da requisição só o método e a rota (`/students/:studentId`), com status e duração: sem URL concreta, query, params, headers, corpo, IP nem user agent. Para apps com dado sensível (saúde, LGPD) |
 | `logRequests` | `true` | log `http.request` automático |
 | `ignorePaths` | `['/healthz', '/health']` | |
 | `captureUnhandled` | `true` | `uncaughtException` e `unhandledRejection`; o processo cai como cairia sem o Radar |
