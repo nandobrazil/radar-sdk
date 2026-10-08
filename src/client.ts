@@ -62,7 +62,7 @@ export class RadarClient {
           onWarning: (message, always) => (always ? this.writeWarning(message) : this.debugWarn(message)),
         });
       }
-      if (this.options.captureUnhandled) installProcessHandlers(this);
+      if (this.options.captureUnhandled && (this.transport || this.options.console)) installProcessHandlers(this);
     } catch (error) {
       this.debugWarn(`radar.init falhou: ${describeError(error)}`);
     }
