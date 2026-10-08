@@ -6,7 +6,7 @@ const { version } = JSON.parse(readFileSync('package.json', 'utf8')) as { versio
 export default defineConfig({
   entry: { index: 'src/index.ts', 'nest/index': 'src/nest/index.ts', 'protocol/index': 'src/protocol/index.ts' },
   format: ['esm', 'cjs'],
-  dts: true,
+  dts: { compilerOptions: { ignoreDeprecations: '6.0' } },
   clean: true,
   sourcemap: true,
   target: 'node20',
