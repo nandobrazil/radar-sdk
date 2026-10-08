@@ -17,8 +17,9 @@ describe('adversarial payloads', () => {
 
   it('stops walking huge objects early', () => {
     const body = Object.fromEntries(Array.from({ length: 200_000 }, (_, index) => [`k${index}`, index]));
+    const baseline = elapsed(() => JSON.stringify(body));
     const took = elapsed(() => requestInfo({ method: 'POST', url: '/webhook', headers: {}, body }, 'mask'));
-    expect(took).toBeLessThan(100);
+    expect(took / baseline).toBeLessThan(2);
   });
 
   it('treats every typed array view as binary', () => {

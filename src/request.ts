@@ -50,8 +50,8 @@ export function redactUrl(url: string, mode: RedactMode): string {
 
 export function requestInfo(req: RequestLike, mode: RedactMode, extra: { route?: string; status?: number; durationMs?: number } = {}): RequestInfo {
   const route = requestRoute(req, extra.route);
-  const params = nonEmpty(req.params) ? (prepare(req.params, mode) as Record<string, string>) : undefined;
-  const query = nonEmpty(req.query) ? (prepare(req.query, mode) as Record<string, unknown>) : undefined;
+  const params = prepareRecord(req.params, mode) as Record<string, string> | undefined;
+  const query = prepareRecord(req.query, mode);
   const body = prepareBody(req.body, mode);
   const userAgent = headerValue(req.headers['user-agent']);
   const ip = req.ip ?? req.socket?.remoteAddress;
@@ -70,8 +70,14 @@ export function requestInfo(req: RequestLike, mode: RedactMode, extra: { route?:
   };
 }
 
-function nonEmpty(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && Object.keys(value).length > 0;
+function isEmptyRecord(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0;
+}
+
+function prepareRecord(value: unknown, mode: RedactMode): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const clean = prepare(value, mode);
+  return isEmptyRecord(clean) || typeof clean !== 'object' || clean === null ? undefined : (clean as Record<string, unknown>);
 }
 
 function prepare(value: unknown, mode: RedactMode): unknown {
@@ -80,6 +86,7 @@ function prepare(value: unknown, mode: RedactMode): unknown {
 
 function prepareBody(body: unknown, mode: RedactMode): unknown {
   if (body === undefined || body === null || body === '') return undefined;
-  if (typeof body === 'object' && !(body instanceof Uint8Array) && !Array.isArray(body) && Object.keys(body).length === 0) return undefined;
-  return limitBytes(prepare(body, mode), LIMITS.bodyBytes);
+  const clean = prepare(body, mode);
+  if (isEmptyRecord(clean)) return undefined;
+  return limitBytes(clean, LIMITS.bodyBytes);
 }
