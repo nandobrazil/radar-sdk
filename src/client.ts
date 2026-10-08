@@ -211,7 +211,7 @@ export class RadarClient {
     };
     this.print(event, error instanceof Error ? error.stack : undefined);
     if (!this.transport) return;
-    this.transport.enqueue(
+    this.transport.enqueue(() =>
       enrichException(event.exception).then(
         (exception) => ({ ...event, exception }),
         () => event,

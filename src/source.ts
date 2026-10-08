@@ -8,7 +8,7 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_CACHED_FILES = 50;
 const MAPPING_URL = /\/\/[#@]\s*sourceMappingURL=(\S+)\s*$/;
 
-type LoadedMap = { map: SourceMap; baseDir: string; sources: string[]; contents: (string | null)[] };
+type LoadedMap = { map: SourceMap; baseDir: string; sources: string[]; contents: (string | null)[]; lines: Map<number, string[]> };
 type LoadedFile = { lines: string[]; map: LoadedMap | null };
 type MappedFrame = { frame: StackFrame; lines: string[] | null };
 type MapPayload = { sources?: string[]; sourcesContent?: (string | null)[]; sourceRoot?: string };
@@ -63,11 +63,21 @@ async function mapFrame(frame: StackFrame): Promise<MappedFrame> {
   if (typeof entry.originalSource !== 'string' || typeof entry.originalLine !== 'number') return { frame, lines: file.lines };
   const originalPath = resolveSource(file.map, entry.originalSource);
   const mapped: StackFrame = { ...frame, file: originalPath, line: entry.originalLine + 1, col: (entry.originalColumn ?? 0) + 1 };
-  const index = file.map.sources.indexOf(entry.originalSource);
-  const content = index >= 0 ? file.map.contents[index] : null;
-  if (typeof content === 'string') return { frame: mapped, lines: content.split(/\r?\n/) };
+  const lines = embeddedLines(file.map, file.map.sources.indexOf(entry.originalSource));
+  if (lines) return { frame: mapped, lines };
   const original = await loadFile(originalPath);
   return { frame: mapped, lines: original?.lines ?? null };
+}
+
+function embeddedLines(map: LoadedMap, index: number): string[] | null {
+  if (index < 0) return null;
+  const cached = map.lines.get(index);
+  if (cached) return cached;
+  const content = map.contents[index];
+  if (typeof content !== 'string') return null;
+  const lines = content.split(/\r?\n/);
+  map.lines.set(index, lines);
+  return lines;
 }
 
 function contextFor(lines: string[], line: number): StackFrame['context'] {
@@ -155,6 +165,7 @@ async function loadMap(path: string, lines: string[]): Promise<LoadedMap | null>
       baseDir: resolve(mapDir, payload.sourceRoot ?? ''),
       sources: payload.sources ?? [],
       contents: payload.sourcesContent ?? [],
+      lines: new Map(),
     };
   } catch {
     return null;

@@ -39,7 +39,7 @@ describe('Transport', () => {
     const server = await serve();
     const transport = createTransport(server.url, { release: 'abc123' });
     transport.enqueue(log('first'));
-    transport.enqueue(Promise.resolve(log('second')));
+    transport.enqueue(async () => log('second'));
     await transport.flush(2000);
     expect(server.received).toHaveLength(1);
     const [request] = server.received;
@@ -148,7 +148,7 @@ describe('Transport', () => {
   it('drops events whose enrichment failed', async () => {
     const server = await serve();
     const transport = createTransport(server.url);
-    transport.enqueue(Promise.reject(new Error('enrichment failed')));
+    transport.enqueue(() => Promise.reject(new Error('enrichment failed')));
     transport.enqueue(log('ok'));
     await transport.flush(1000);
     expect(server.events()).toHaveLength(1);

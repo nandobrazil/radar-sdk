@@ -10,7 +10,7 @@ const GZIP_THRESHOLD_BYTES = 8192;
 const MAX_BACKOFF_MS = 30_000;
 const UNAUTHORIZED_PAUSE_MS = 10 * 60_000;
 
-export type Pending = RadarEvent | Promise<RadarEvent>;
+export type Pending = RadarEvent | (() => Promise<RadarEvent>);
 
 export type TransportConfig = {
   url: string;
@@ -62,7 +62,6 @@ export class Transport {
 
   enqueue(event: Pending): void {
     if (this.stopped) return;
-    if (event instanceof Promise) event.catch(() => undefined);
     if (this.queue.length >= this.maxQueue) {
       this.droppedCount += 1;
       this.warn('queue_full', 'fila do Radar cheia; eventos estão sendo descartados', false);
@@ -102,7 +101,7 @@ export class Transport {
 
   private async sendBatch(): Promise<boolean> {
     const items = this.queue.splice(0, this.batchSize);
-    const resolved = await Promise.all(items.map((item) => Promise.resolve(item).then((event) => event, () => null)));
+    const resolved = await Promise.all(items.map((item) => Promise.resolve().then(() => (typeof item === 'function' ? item() : item)).then((event) => event, () => null)));
     const events: RadarEvent[] = [];
     const leftovers: RadarEvent[] = [];
     let bytes = 0;
