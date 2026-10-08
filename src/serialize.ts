@@ -3,13 +3,19 @@ import { LIMITS } from './protocol/index.js';
 import { redactDeep } from './redact.js';
 
 export const TRUNCATED = '…[cortado]';
+export const LIMIT_REACHED = '…[limite]';
+
+const MAX_NODES = 2000;
+
+type Budget = { remaining: number };
 
 export function truncate(value: string, max: number = LIMITS.stringLength): string {
   return value.length > max ? value.slice(0, max) + TRUNCATED : value;
 }
 
-export function sanitize(value: unknown, depth = 0, seen: WeakSet<object> = new WeakSet()): unknown {
+export function sanitize(value: unknown, depth = 0, seen: WeakSet<object> = new WeakSet(), budget: Budget = { remaining: MAX_NODES }): unknown {
   if (value === null || value === undefined) return value;
+  budget.remaining -= 1;
   switch (typeof value) {
     case 'string':
       return truncate(value);
@@ -24,23 +30,36 @@ export function sanitize(value: unknown, depth = 0, seen: WeakSet<object> = new 
       return undefined;
   }
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
-  if (value instanceof Uint8Array || value instanceof ArrayBuffer) return `[binário ${value.byteLength} bytes]`;
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return `[binário ${value.byteLength} bytes]`;
   if (value instanceof Error) return { name: value.name, message: truncate(value.message) };
   const object = value as object;
   if (seen.has(object)) return '[circular]';
   if (depth >= LIMITS.depth) return '[profundidade]';
+  if (budget.remaining <= 0) return LIMIT_REACHED;
   seen.add(object);
   try {
     if (Array.isArray(object)) {
-      const items = object.slice(0, LIMITS.arrayItems).map((item) => sanitize(item, depth + 1, seen) ?? null);
+      const items: unknown[] = [];
+      for (const item of object.slice(0, LIMITS.arrayItems)) {
+        if (budget.remaining <= 0) {
+          items.push(LIMIT_REACHED);
+          break;
+        }
+        items.push(sanitize(item, depth + 1, seen, budget) ?? null);
+      }
       if (object.length > LIMITS.arrayItems) items.push(`…[mais ${object.length - LIMITS.arrayItems}]`);
       return items;
     }
-    if (object instanceof Map) return sanitize(Object.fromEntries(object.entries()), depth + 1, seen);
-    if (object instanceof Set) return sanitize([...object], depth + 1, seen);
+    if (object instanceof Map) return sanitize(Object.fromEntries(object.entries()), depth + 1, seen, budget);
+    if (object instanceof Set) return sanitize([...object], depth + 1, seen, budget);
     const result: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(object)) {
-      const clean = sanitize(item, depth + 1, seen);
+    for (const key in object) {
+      if (!Object.prototype.hasOwnProperty.call(object, key)) continue;
+      if (budget.remaining <= 0) {
+        result['…'] = LIMIT_REACHED;
+        break;
+      }
+      const clean = sanitize((object as Record<string, unknown>)[key], depth + 1, seen, budget);
       if (clean !== undefined) result[key] = clean;
     }
     return result;

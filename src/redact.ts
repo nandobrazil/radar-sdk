@@ -3,7 +3,7 @@ import type { RedactMode } from './options.js';
 
 const SENSITIVE_KEY = /pass|senha|secret|token|authorization|cookie|api[-_]?key|cpf|card|cvv/i;
 const SENSITIVE_HEADER = /^(authorization|proxy-authorization|cookie|set-cookie|x-api-key)$|^x-.+-(token|key|secret)$/i;
-const AUTH_SCHEME = /^(Bearer|Basic|Token|Digest|ApiKey)\s+(.+)$/i;
+const AUTH_SCHEME = /^(Bearer|Basic|Token|Digest|ApiKey)\s+/i;
 const MAX_DEPTH = 8;
 
 export function fingerprint(value: string): string {
@@ -12,9 +12,9 @@ export function fingerprint(value: string): string {
 
 export function maskValue(value: unknown): string {
   const text = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
-  const scheme = AUTH_SCHEME.exec(text);
+  const scheme = AUTH_SCHEME.exec(text.slice(0, 16));
   const prefix = scheme ? `${scheme[1]} ` : '';
-  const secret = scheme ? (scheme[2] ?? '') : text;
+  const secret = scheme ? text.slice(scheme[0].length) : text;
   const visible = secret.length > 12 ? `${secret.slice(0, 4)}…${secret.slice(-4)}` : '•••';
   return `${prefix}${visible} #${fingerprint(text)}`;
 }
