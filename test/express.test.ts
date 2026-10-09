@@ -139,4 +139,32 @@ describe('middleware', () => {
     expect(http.attrs).not.toHaveProperty('path');
     await minimal.close();
   });
+
+  it('masks path secrets when an app-level error middleware reports the error', async () => {
+    const app = express();
+    app.use(client.middleware());
+    const api = express.Router();
+    api.post('/accounts/:accountId/reset/:token', () => {
+      throw new Error('reset failed');
+    });
+    app.use('/api', api);
+    app.get('/reset/:token', () => {
+      throw new Error('reset failed');
+    });
+    app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      client.captureError(error);
+      res.status(500).json({ ok: false });
+    });
+    await request(app).get('/reset/s3cr3t-reset-token-value').expect(500);
+    await request(app).post('/api/accounts/42/reset/an0ther-reset-token-value').expect(500);
+    await vi.waitFor(async () => {
+      await client.flush();
+      expect(server.events().filter((event) => event.type === 'error')).toHaveLength(2);
+      expect(logs().filter((item) => item.message === 'http.request')).toHaveLength(2);
+    });
+    const sent = JSON.stringify(server.events());
+    expect(sent).not.toContain('s3cr3t-reset-token-value');
+    expect(sent).not.toContain('an0ther-reset-token-value');
+    expect(sent).toContain('/api/accounts/42/reset/');
+  });
 });

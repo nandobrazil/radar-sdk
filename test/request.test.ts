@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RequestLike } from '../src/context.js';
 import { currentContext, runWithContext } from '../src/context.js';
-import { redactUrl, requestHeaders, requestInfo, requestPath } from '../src/request.js';
+import { redactUrl, requestHeaders, requestInfo, requestPath, routeParams } from '../src/request.js';
 
 const req: RequestLike = {
   method: 'post',
@@ -97,3 +97,24 @@ describe('context', () => {
     expect(currentContext()).toBeUndefined();
   });
 });
+
+describe('routeParams', () => {
+  const req = (route: string | undefined, baseUrl = '') => ({ headers: {}, baseUrl, ...(route ? { route: { path: route } } : {}) });
+
+  it('reads params from the route pattern aligned to the end of the path', () => {
+    expect(routeParams(req('/reset/:token'), '/reset/abc')).toEqual({ token: 'abc' });
+    expect(routeParams(req('/accounts/:accountId/reset/:token'), '/api/accounts/42/reset/abc')).toEqual({ accountId: '42', token: 'abc' });
+    expect(routeParams(req('/reset/:token', '/api'), '/api/reset/abc')).toEqual({ token: 'abc' });
+  });
+
+  it('ignores a trailing slash and decodes values', () => {
+    expect(routeParams(req('/reset/:token'), '/reset/a%2Fb%20c/')).toEqual({ token: 'a/b c' });
+  });
+
+  it('returns nothing without a route or when the static segments do not match', () => {
+    expect(routeParams(req(undefined), '/reset/abc')).toEqual({});
+    expect(routeParams(req('/reset/:token'), '/other/abc')).toEqual({});
+    expect(routeParams(req('/a/b/:token'), '/b/abc')).toEqual({});
+  });
+});
+

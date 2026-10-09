@@ -16,7 +16,7 @@ import {
   type RuntimeInfo,
   type UserInfo,
 } from './protocol/index.js';
-import { redactPath, requestInfo, requestPath, requestRoute } from './request.js';
+import { pathParams, redactPath, requestInfo, requestPath, requestRoute } from './request.js';
 import { setFingerprintSecret } from './redact.js';
 import { prepareAttrs, truncate } from './serialize.js';
 import { enrichException } from './source.js';
@@ -150,7 +150,7 @@ export class RadarClient {
         this.emitLog(level, 'http.request', {
           method: (req.method ?? 'GET').toUpperCase(),
           ...(route ? { route } : {}),
-          ...(this.options.requestDetail === 'full' ? { path: redactPath(requestPath(req), req.params, this.options.redact) } : {}),
+          ...(this.options.requestDetail === 'full' ? { path: redactPath(requestPath(req), pathParams(req, requestPath(req)), this.options.redact) } : {}),
           status,
           durationMs: elapsedSince(context.startedAt),
         }),

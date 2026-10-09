@@ -34,6 +34,45 @@ export function requestRoute(req: RequestLike, route?: string): string | undefin
   return typeof req.route?.path === 'string' ? req.route.path : undefined;
 }
 
+const ROUTE_PARAM = /^:([A-Za-z_$][\w$]*)/;
+
+function pathSegments(value: string): string[] {
+  const segments = value.split('/');
+  while (segments.length > 1 && segments[segments.length - 1] === '') segments.pop();
+  return segments;
+}
+
+function decodeSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+export function routeParams(req: RequestLike, path: string): Record<string, string> {
+  if (typeof req.route?.path !== 'string') return {};
+  const pattern = pathSegments(`${typeof req.baseUrl === 'string' ? req.baseUrl : ''}${req.route.path}`).filter((segment, index) => index > 0 || segment !== '');
+  const values = pathSegments(path);
+  if (pattern.length > values.length) return {};
+  const offset = values.length - pattern.length;
+  const result: Record<string, string> = {};
+  for (let index = 0; index < pattern.length; index++) {
+    const value = values[offset + index];
+    const param = ROUTE_PARAM.exec(pattern[index]);
+    if (!param) {
+      if (pattern[index] !== value) return {};
+      continue;
+    }
+    if (value) result[param[1]] = decodeSegment(value);
+  }
+  return result;
+}
+
+export function pathParams(req: RequestLike, path: string): Record<string, unknown> {
+  return { ...routeParams(req, path), ...(req.params ?? {}) };
+}
+
 export function redactPath(path: string, params: Record<string, unknown> | undefined, mode: RedactMode): string {
   if (mode === 'none' || !params) return path;
   let result = path;
@@ -50,7 +89,7 @@ export function safeUrl(req: RequestLike, mode: RedactMode): string {
   const queryStart = url.indexOf('?');
   const path = queryStart >= 0 ? url.slice(0, queryStart) : url;
   const query = queryStart >= 0 ? url.slice(queryStart) : '';
-  return redactUrl(redactPath(path, req.params, mode) + query, mode);
+  return redactUrl(redactPath(path, pathParams(req, path), mode) + query, mode);
 }
 
 export function redactUrl(url: string, mode: RedactMode): string {

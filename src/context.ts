@@ -7,6 +7,7 @@ export type RequestLike = {
   method?: string;
   url?: string;
   originalUrl?: string;
+  baseUrl?: string;
   route?: { path?: unknown };
   params?: Record<string, unknown>;
   query?: unknown;
