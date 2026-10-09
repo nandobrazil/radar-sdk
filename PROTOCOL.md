@@ -11,7 +11,7 @@ Content-Type: application/json
 Content-Encoding: gzip            (opcional)
 ```
 
-Limites: corpo de até 1 MB depois de descompactado, até 500 eventos por lote.
+Limites: até 500 eventos por lote e 1 MB de corpo, tanto nos bytes recebidos quanto no JSON depois de descompactado. `Content-Encoding` aceita só `gzip` ou nenhum.
 
 ## Tipos
 
@@ -117,13 +117,16 @@ export type IngestError = { error: { code: IngestErrorCode; message: string } };
 
 | Status | Corpo | Quando | O SDK faz |
 |---|---|---|---|
-| 202 | `IngestResponse` | lote aceito, mesmo que parcialmente: eventos inválidos ou de `type` desconhecido entram em `dropped` | segue |
-| 400 | `invalid_batch` | o envelope não é um `EventBatch` (sem `v: 1`, sem `events`) | descarta o lote, avisa uma vez |
+| 202 | `IngestResponse` | lote aceito, mesmo que parcialmente: eventos inválidos, de `type` desconhecido ou acima da cota do dia entram em `dropped` | segue |
+| 400 | `invalid_batch` | JSON inválido, `Content-Encoding` diferente de `gzip`, ou o envelope não é um `EventBatch` (sem `v: 1`, sem `sdk`, sem `events`) | descarta o lote, avisa uma vez |
 | 401 | `invalid_key` | chave ausente, inexistente ou revogada | pausa os envios por 10 min, descarta a fila, avisa uma vez |
-| 403 | `account_disabled` | conta desativada | igual ao 401 |
-| 413 | `payload_too_large` | acima de 1 MB ou 500 eventos | descarta o lote |
-| 429 | `quota_exceeded` / `rate_limited`, com `Retry-After` em segundos | cota do dia ou excesso de requisições | devolve o lote à fila e espera o `Retry-After` |
+| 403 | `account_disabled` | conta desativada ou projeto apagado | igual ao 401 |
+| 413 | `payload_too_large` | acima de 1 MB ou de 500 eventos | descarta o lote |
+| 429 | `rate_limited`, com `Retry-After: 1` | excesso de requisições da mesma chave | devolve o lote à fila e espera o `Retry-After` |
+| 429 | `quota_exceeded`, com `Retry-After` até a virada do dia | a cota do dia acabou e nenhum evento do lote coube | devolve o lote à fila e espera o `Retry-After` |
 | 5xx / rede | — | servidor fora | devolve o lote à fila e tenta com espera crescente |
+
+Quando a cota do dia acaba, o Radar avisa uma vez por dia em todos os canais ativos da conta.
 
 ## Compatibilidade
 
@@ -132,7 +135,9 @@ O v1 só cresce: campo opcional novo pode; mudar o significado, tornar obrigató
 
 ## Limites recomendados no SDK
 
-O servidor corta o que passar destes limites; o SDK deve cortar antes de enviar.
+O servidor também corta, com regras um pouco diferentes: a `message` do log em 2000 bytes (UTF-8), a mensagem da exceção em 2000 caracteres, `attrs`, `query` e headers em 16 KB, `params` em 4 KB e `body` em 16 KB. Um campo JSON acima do limite vira `{ "_truncated": "<começo do JSON>" }`. Abaixo de 64 níveis de profundidade o servidor troca o valor por `null`; o SDK corta em 6.
+
+O SDK deve cortar antes de enviar:
 
 | Item | Limite |
 |---|---|
