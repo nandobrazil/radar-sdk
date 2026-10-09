@@ -4,6 +4,7 @@ import { truncate } from './serialize.js';
 
 const WITH_FUNCTION = /^at (?:async )?(.+?) \((.+)\)$/;
 const LOCATION = /^(.+):(\d+):(\d+)$/;
+const AT_SIGN_FRAME = /^(.*?)@(.+):(\d+):(\d+)$/;
 
 export function parseStack(stack: string | undefined): StackFrame[] {
   if (!stack) return [];
@@ -20,6 +21,28 @@ export function parseStack(stack: string | undefined): StackFrame[] {
       frames.push({ ...(fn ? { fn } : {}), file, line: Number(parsed[2]), col: Number(parsed[3]), inApp: isInApp(file) });
     } else {
       frames.push({ ...(fn ? { fn } : {}), file: location, inApp: false });
+    }
+    if (frames.length >= LIMITS.frames) break;
+  }
+  return frames;
+}
+
+export function parseBrowserStack(stack: string | undefined): StackFrame[] {
+  if (!stack) return [];
+  const frames: StackFrame[] = [];
+  for (const raw of stack.split('\n')) {
+    const line = raw.trim();
+    if (line.startsWith('at ')) {
+      const withFunction = WITH_FUNCTION.exec(line);
+      const fn = withFunction?.[1];
+      const location = withFunction ? (withFunction[2] ?? '') : line.replace(/^at (?:async )?/, '');
+      const parsed = LOCATION.exec(location);
+      frames.push(parsed ? { ...(fn ? { fn } : {}), file: parsed[1] ?? '', line: Number(parsed[2]), col: Number(parsed[3]), inApp: false } : { ...(fn ? { fn } : {}), file: location, inApp: false });
+    } else {
+      const parsed = AT_SIGN_FRAME.exec(line);
+      if (!parsed) continue;
+      const fn = parsed[1];
+      frames.push({ ...(fn ? { fn } : {}), file: parsed[2] ?? '', line: Number(parsed[3]), col: Number(parsed[4]), inApp: false });
     }
     if (frames.length >= LIMITS.frames) break;
   }

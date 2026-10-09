@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { exceptionInfo, isInApp, parseStack } from '../src/stack.js';
+import { exceptionInfo, isInApp, parseBrowserStack, parseStack } from '../src/stack.js';
 
 const STACK = [
   'TypeError: boom',
@@ -62,5 +62,42 @@ describe('exceptionInfo', () => {
   it('handles thrown strings and plain objects', () => {
     expect(exceptionInfo('falhou')).toEqual({ type: 'Error', message: 'falhou', frames: [] });
     expect(exceptionInfo({ name: 'AxiosError', message: 'timeout' })).toEqual({ type: 'AxiosError', message: 'timeout', frames: [] });
+  });
+});
+
+describe('parseBrowserStack', () => {
+  it('reads Chrome stacks with URLs', () => {
+    const stack = [
+      'TypeError: Cannot read properties of null',
+      '    at handleClick (https://arvorede.link/_app/immutable/nodes/2.Bx1.js:1:2345)',
+      '    at https://arvorede.link/_app/immutable/chunks/entry.js:3:10',
+      '    at <anonymous>',
+    ].join('\n');
+    expect(parseBrowserStack(stack)).toEqual([
+      { fn: 'handleClick', file: 'https://arvorede.link/_app/immutable/nodes/2.Bx1.js', line: 1, col: 2345, inApp: false },
+      { file: 'https://arvorede.link/_app/immutable/chunks/entry.js', line: 3, col: 10, inApp: false },
+      { file: '<anonymous>', inApp: false },
+    ]);
+  });
+
+  it('reads Firefox and Safari stacks', () => {
+    const stack = [
+      'handleClick@https://arvorede.link/_app/immutable/nodes/2.Bx1.js:1:2345',
+      '@https://arvorede.link/_app/immutable/chunks/entry.js:3:10',
+      'global code@https://arvorede.link/:12:3',
+      '[native code]',
+    ].join('\n');
+    expect(parseBrowserStack(stack)).toEqual([
+      { fn: 'handleClick', file: 'https://arvorede.link/_app/immutable/nodes/2.Bx1.js', line: 1, col: 2345, inApp: false },
+      { file: 'https://arvorede.link/_app/immutable/chunks/entry.js', line: 3, col: 10, inApp: false },
+      { fn: 'global code', file: 'https://arvorede.link/', line: 12, col: 3, inApp: false },
+    ]);
+  });
+
+  it('caps the number of frames and ignores junk', () => {
+    const stack = Array.from({ length: 80 }, (_, index) => `f${index}@https://a.test/x.js:${index + 1}:1`).join('\n');
+    expect(parseBrowserStack(stack)).toHaveLength(50);
+    expect(parseBrowserStack(undefined)).toEqual([]);
+    expect(parseBrowserStack('just a message')).toEqual([]);
   });
 });
