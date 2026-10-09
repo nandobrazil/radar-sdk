@@ -1,6 +1,6 @@
 # @oconde/radar
 
-SDK do [Radar](https://radar.oconde.dev) para Node.js e NestJS: logs, erros com trecho de código e contexto de requisição. Sem dependências em runtime.
+SDK do [Radar](https://radar.oconde.dev) para Node.js, NestJS e SvelteKit: logs, erros com trecho de código, contexto de requisição, tarefas agendadas e erros do navegador. Sem dependências em runtime.
 
 **Documentação completa: https://radar.oconde.dev/docs/**
 
@@ -55,6 +55,44 @@ app.use(reportErrors);
 ```
 
 Exemplo completo em [Express e Node](https://radar.oconde.dev/docs/sdk/express/).
+
+## SvelteKit
+
+```ts
+import { sequence } from '@sveltejs/kit/hooks';
+import { radar } from '@oconde/radar';
+import { radarHandle, radarHandleError } from '@oconde/radar/sveltekit';
+
+radar.init({ key: process.env.RADAR_KEY, release: process.env.GIT_SHA });
+
+export const handle = sequence(radarHandle(), yourHandle);
+export const handleError = radarHandleError();
+```
+
+Erros do navegador vão por uma rota do próprio app, sem expor a chave:
+
+```ts
+import { radarClientErrors } from '@oconde/radar/sveltekit';
+
+export const POST = radarClientErrors();
+```
+
+```ts
+import { handleErrorWithRadar, listenForClientErrors } from '@oconde/radar/browser';
+
+listenForClientErrors();
+export const handleError = handleErrorWithRadar();
+```
+
+Com `build: { sourcemap: 'hidden' }` no Vite e `radar-sourcemaps` depois do build, os mapas saem de `build/client` e o servidor mostra o código original. Detalhes em [SvelteKit](https://radar.oconde.dev/docs/sdk/sveltekit/) e [Erros do navegador](https://radar.oconde.dev/docs/sdk/browser/).
+
+## Tarefas agendadas
+
+```ts
+await radar.cron('nightly-report', () => buildReport());
+```
+
+`radar.cron` avisa o Radar no início, no fim e na falha, e o Radar alerta se a tarefa atrasar ou falhar. Em scripts sem o SDK, o check-in é um `POST` (veja o [PROTOCOL.md](PROTOCOL.md)). Para jobs e workers, `radar.withContext(fn)` dá a cada execução o próprio `requestId`. Detalhes em [Tarefas agendadas](https://radar.oconde.dev/docs/sdk/cron/).
 
 ## Erros com o seu código
 

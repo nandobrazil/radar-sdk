@@ -128,6 +128,37 @@ export type IngestError = { error: { code: IngestErrorCode; message: string } };
 
 Quando a cota do dia acaba, o Radar avisa uma vez por dia em todos os canais ativos da conta.
 
+## Check-in de tarefa agendada
+
+```
+POST https://radar-ingest.oconde.dev/api/v1/checkins/<slug>
+Authorization: Bearer rk_<40 caracteres>
+Content-Type: application/json
+
+{ "status": "in_progress" | "ok" | "error", "checkInId"?: string, "durationMs"?: number, "environment"?: string, "release"?: string }
+```
+
+- `slug`: `^[a-z0-9][a-z0-9-]{0,63}$`, o mesmo do monitor criado no Radar, no projeto da chave.
+- `checkInId` (até 64 caracteres) liga o `in_progress` ao `ok` ou `error` da mesma execução. Sem ele, `ok` e `error` fecham a execução aberta mais recente.
+- `202 { "accepted": true }`. `404 unknown_monitor` quando o slug não existe no projeto da chave, `400 invalid_checkin` para corpo fora do formato, e `401`, `403` e `429` como no envio de eventos.
+- O SDK manda na hora, sem fila, e nunca lança: `radar.checkIn(slug, status, { checkInId, durationMs })` ou `radar.cron(slug, fn)`.
+
+Exemplo para um script sem o SDK:
+
+```bash
+curl -fsS -X POST -H "Authorization: Bearer $RADAR_KEY" -H 'content-type: application/json' \
+  -d '{"status":"ok"}' https://radar-ingest.oconde.dev/api/v1/checkins/walg-archive-check
+```
+
+## Resumo de release
+
+```
+GET https://radar-ingest.oconde.dev/api/v1/releases/<release>
+Authorization: Bearer rk_<40 caracteres>
+```
+
+`200 { "release", "firstSeen": iso | null, "newIssues": n, "events": n, "issues": [{ "title", "culprit", "count", "url" }] }`, com até 5 erros (mais ocorrências primeiro), só do projeto da chave. Serve para o pipeline de deploy olhar a release logo depois de publicar.
+
 ## Compatibilidade
 
 O v1 só cresce: campo opcional novo pode; mudar o significado, tornar obrigatório ou remover não pode. O servidor ignora campos desconhecidos. Mudança que quebra vira `/api/v2/events`, com o v1 mantido.
