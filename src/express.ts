@@ -1,7 +1,5 @@
-import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { runWithContext, type RadarContext, type RequestLike, type ResponseLike } from './context.js';
-import { LIMITS } from './protocol/index.js';
+import { requestIdFrom, runWithContext, type RadarContext, type RequestLike, type ResponseLike } from './context.js';
 import { headerValue } from './request.js';
 
 export type RequestLogger = {
@@ -15,8 +13,7 @@ export function createMiddleware(logger: RequestLogger): RadarMiddleware {
   return (req, res, next) => {
     let context: RadarContext;
     try {
-      const incoming = headerValue(req.headers['x-request-id'])?.trim();
-      const requestId = incoming && incoming.length <= LIMITS.requestIdLength ? incoming : randomUUID();
+      const requestId = requestIdFrom(headerValue(req.headers['x-request-id']));
       context = { requestId, startedAt: performance.now(), req };
       res.setHeader('x-request-id', requestId);
       if (logger.shouldLogRequest(req)) res.once('finish', () => logger.logHttpRequest(context, res.statusCode));

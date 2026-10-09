@@ -140,6 +140,40 @@ describe('RadarClient errors', () => {
   });
 });
 
+describe('RadarClient.withContext', () => {
+  it('runs a job in a fresh context with its own requestId and returns the result', async () => {
+    const result = await client.withContext(async () => {
+      client.info('job.started');
+      client.setUser({ id: 'worker' });
+      client.info('job.finished');
+      return 42;
+    });
+    expect(result).toBe(42);
+    await client.flush();
+    const [started, finished] = logs();
+    expect(started!.requestId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(finished!.requestId).toBe(started!.requestId);
+    expect(finished!.user).toEqual({ id: 'worker' });
+  });
+
+  it('uses a given requestId and never reuses the outer context', async () => {
+    await runWithContext({ requestId: 'outer', startedAt: 0 }, async () => {
+      await client.withContext(() => client.info('inner'), { requestId: 'run-7' });
+      client.withContext(() => client.info('fresh'));
+    });
+    await client.flush();
+    const ids = logs().map((event) => event.requestId);
+    expect(ids[0]).toBe('run-7');
+    expect(ids[1]).not.toBe('outer');
+    expect(ids[1]).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('rejects an oversized requestId and propagates errors', () => {
+    client.withContext(() => client.info('long'), { requestId: 'x'.repeat(200) });
+    expect(() => client.withContext(() => { throw new Error('job failed'); })).toThrow('job failed');
+  });
+});
+
 describe('RadarClient when Radar is down', () => {
   it('flush resolves within the timeout', async () => {
     const offline = new RadarClient();

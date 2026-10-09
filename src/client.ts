@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { performance } from 'node:perf_hooks';
-import { currentContext, runWithContext, type RadarContext, type RequestLike } from './context.js';
+import { currentContext, requestIdFrom, runWithContext, type RadarContext, type RequestLike } from './context.js';
 import { createMiddleware, type RadarMiddleware } from './express.js';
 import { levelEnabled, resolveOptions, type RadarOptions, type RedactMode, type ResolvedOptions } from './options.js';
 import { installProcessHandlers } from './process-handlers.js';
@@ -130,6 +130,10 @@ export class RadarClient {
     };
     if (currentContext()) return execute();
     return runWithContext({ requestId: randomUUID(), startedAt: performance.now() }, execute);
+  }
+
+  withContext<T>(fn: () => T, options: { requestId?: string } = {}): T {
+    return runWithContext({ requestId: requestIdFrom(options.requestId), startedAt: performance.now() }, fn);
   }
 
   middleware(): RadarMiddleware {

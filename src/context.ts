@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { UserInfo } from './protocol/index.js';
+import { randomUUID } from 'node:crypto';
+import { LIMITS, type UserInfo } from './protocol/index.js';
 
 export type HeaderValue = string | string[] | number | undefined;
 
@@ -51,4 +52,9 @@ export function currentContext(): RadarContext | undefined {
 
 export function runWithContext<T>(context: RadarContext, fn: () => T): T {
   return globalState().storage.run(context, fn);
+}
+
+export function requestIdFrom(incoming: string | undefined | null): string {
+  const value = incoming?.trim();
+  return value && value.length <= LIMITS.requestIdLength ? value : randomUUID();
 }
