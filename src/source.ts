@@ -14,18 +14,21 @@ type MappedFrame = { frame: StackFrame; lines: string[] | null };
 type MapPayload = { sources?: string[]; sourcesContent?: (string | null)[]; sourceRoot?: string };
 type MapEntry = { originalSource?: string; originalLine?: number; originalColumn?: number };
 
+export type MapLocator = (file: string) => string | null;
+export type EnrichOptions = { mapLocator?: MapLocator };
+
 const cache = new Map<string, Promise<LoadedFile | null>>();
 
 export function clearSourceCache(): void {
   cache.clear();
 }
 
-export async function enrichFrames(frames: StackFrame[], cwd: string = process.cwd()): Promise<StackFrame[]> {
+export async function enrichFrames(frames: StackFrame[], cwd: string = process.cwd(), options: EnrichOptions = {}): Promise<StackFrame[]> {
   const result: StackFrame[] = [];
   let withContext = 0;
   for (const frame of frames) {
     try {
-      const { frame: mapped, lines } = await mapFrame(frame);
+      const { frame: mapped, lines } = await mapFrame(frame, options.mapLocator);
       let next = mapped;
       if (mapped.inApp && lines && mapped.line && withContext < LIMITS.contextFrames) {
         const context = contextFor(lines, mapped.line);
@@ -42,10 +45,10 @@ export async function enrichFrames(frames: StackFrame[], cwd: string = process.c
   return result;
 }
 
-export async function enrichException(exception: ExceptionInfo, cwd: string = process.cwd()): Promise<ExceptionInfo> {
-  const frames = await enrichFrames(exception.frames, cwd);
+export async function enrichException(exception: ExceptionInfo, cwd: string = process.cwd(), options: EnrichOptions = {}): Promise<ExceptionInfo> {
+  const frames = await enrichFrames(exception.frames, cwd, options);
   if (!exception.cause) return { ...exception, frames };
-  return { ...exception, frames, cause: await enrichException(exception.cause, cwd) };
+  return { ...exception, frames, cause: await enrichException(exception.cause, cwd, options) };
 }
 
 export function relativize(file: string, cwd: string): string {
@@ -54,9 +57,9 @@ export function relativize(file: string, cwd: string): string {
   return path.startsWith('..') || isAbsolute(path) ? file : path.split(sep).join('/');
 }
 
-async function mapFrame(frame: StackFrame): Promise<MappedFrame> {
+async function mapFrame(frame: StackFrame, locator?: MapLocator): Promise<MappedFrame> {
   if (!frame.line || !isAbsolute(frame.file)) return { frame, lines: null };
-  const file = await loadFile(frame.file);
+  const file = await loadFile(frame.file, locator);
   if (!file) return { frame, lines: null };
   if (!file.map) return { frame, lines: file.lines };
   const entry = file.map.map.findEntry(frame.line - 1, (frame.col ?? 1) - 1) as MapEntry;
@@ -102,15 +105,16 @@ function resolveSource(map: LoadedMap, source: string): string {
   return isAbsolute(source) ? source : resolve(map.baseDir, source);
 }
 
-function loadFile(path: string): Promise<LoadedFile | null> {
-  const cached = cache.get(path);
+function loadFile(path: string, locator?: MapLocator): Promise<LoadedFile | null> {
+  const key = locator ? `${path}\u0000located` : path;
+  const cached = cache.get(key);
   if (cached) {
-    cache.delete(path);
-    cache.set(path, cached);
+    cache.delete(key);
+    cache.set(key, cached);
     return cached;
   }
-  const pending = readSource(path).catch(() => null);
-  cache.set(path, pending);
+  const pending = readSource(path, locator).catch(() => null);
+  cache.set(key, pending);
   if (cache.size > MAX_CACHED_FILES) {
     const oldest = cache.keys().next().value;
     if (oldest !== undefined) cache.delete(oldest);
@@ -118,11 +122,11 @@ function loadFile(path: string): Promise<LoadedFile | null> {
   return pending;
 }
 
-async function readSource(path: string): Promise<LoadedFile | null> {
+async function readSource(path: string, locator?: MapLocator): Promise<LoadedFile | null> {
   const text = await readText(path);
   if (text === null) return null;
   const lines = text.split(/\r?\n/);
-  return { lines, map: await loadMap(path, lines) };
+  return { lines, map: await loadMap(path, lines, locator) };
 }
 
 async function readText(path: string): Promise<string | null> {
@@ -135,7 +139,7 @@ async function readText(path: string): Promise<string | null> {
   }
 }
 
-async function loadMap(path: string, lines: string[]): Promise<LoadedMap | null> {
+async function loadMap(path: string, lines: string[], locator?: MapLocator): Promise<LoadedMap | null> {
   let url: string | undefined;
   for (let index = lines.length - 1; index >= 0 && index >= lines.length - 5; index--) {
     const match = MAPPING_URL.exec(lines[index] ?? '');
@@ -144,10 +148,15 @@ async function loadMap(path: string, lines: string[]): Promise<LoadedMap | null>
       break;
     }
   }
-  if (!url) return null;
   let raw: string | null;
   let mapDir: string;
-  if (url.startsWith('data:')) {
+  const located = url ? null : (locator?.(path) ?? null);
+  if (located) {
+    raw = await readText(located);
+    mapDir = dirname(located);
+  } else if (!url) {
+    return null;
+  } else if (url.startsWith('data:')) {
     const comma = url.indexOf(',');
     const encoded = url.slice(comma + 1);
     raw = url.slice(0, comma).endsWith(';base64') ? Buffer.from(encoded, 'base64').toString('utf8') : decodeURIComponent(encoded);

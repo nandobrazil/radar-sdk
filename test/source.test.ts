@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import ts from 'typescript';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ExceptionInfo } from '../src/protocol/index.js';
@@ -99,6 +99,28 @@ describe('enrichFrames', () => {
   it('never throws for unreadable files', async () => {
     const result = await enrichFrames([{ fn: 'x', file: '/does/not/exist.js', line: 1, col: 1, inApp: true }], '/');
     expect(result).toEqual([{ fn: 'x', file: 'does/not/exist.js', line: 1, col: 1, inApp: true }]);
+  });
+});
+
+describe('enrichFrames with a map locator', () => {
+  it('finds a hidden source map outside the served directory', async () => {
+    const file = compile('hidden/client', { inlineSources: true, keepSource: false });
+    const stack = stackOf(file);
+    const code = readFileSync(file, 'utf8').replace(/\/\/# sourceMappingURL=.*$/m, '');
+    writeFileSync(file, code);
+    const clientDir = join(root, 'hidden/client');
+    const mapsDir = join(root, 'hidden/maps');
+    const target = join(mapsDir, relative(clientDir, `${file}.map`));
+    mkdirSync(dirname(target), { recursive: true });
+    renameSync(`${file}.map`, target);
+    const frames = parseStack(stack);
+    const without = await enrichFrames(frames, root);
+    expect(without[0]!.file).toBe('hidden/client/dist/thrower.js');
+    clearSourceCache();
+    const mapLocator = (path: string) => (path.startsWith(clientDir) ? join(mapsDir, relative(clientDir, path)) + '.map' : null);
+    const [top] = await enrichFrames(frames, root, { mapLocator });
+    expect(top!.line).toBe(5);
+    expect(top!.context?.line).toContain('throw new Error');
   });
 });
 
