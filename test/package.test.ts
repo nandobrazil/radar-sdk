@@ -50,15 +50,16 @@ describe('package output', () => {
   });
 
   it('exposes the sveltekit entry and the radar-sourcemaps command', () => {
-    const script = `const kit = require(${JSON.stringify(join(root, 'dist/sveltekit/index.cjs'))}); process.stdout.write([typeof kit.radarHandle, typeof kit.radarHandleError, typeof kit.radarClientErrors, typeof kit.moveClientSourceMaps].join(','));`;
-    expect(execFileSync(process.execPath, ['-e', script], { encoding: 'utf8' })).toBe('function,function,function,function');
+    const script = `const kit = require(${JSON.stringify(join(root, 'dist/sveltekit/index.cjs'))}); process.stdout.write([typeof kit.radarHandle, typeof kit.radarHandleError, typeof kit.radarClientErrors, typeof kit.moveClientSourceMaps, typeof kit.composeServerSourceMaps].join(','));`;
+    expect(execFileSync(process.execPath, ['-e', script], { encoding: 'utf8' })).toBe('function,function,function,function,function');
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { bin: Record<string, string> };
     const bin = join(root, pkg.bin['radar-sourcemaps']!);
     const build = mkdtempSync(join(tmpdir(), 'radar-bin-'));
     mkdirSync(join(build, 'client/_app'), { recursive: true });
     writeFileSync(join(build, 'client/_app/a.js.map'), '{}');
     const output = execFileSync(process.execPath, [bin, build], { encoding: 'utf8' });
-    expect(output).toContain('1');
+    expect(output).toContain('1 source maps moved');
+    expect(output).toContain('0 server source maps');
     expect(readdirSync(join(build, 'client-maps/_app'))).toEqual(['a.js.map']);
     rmSync(build, { recursive: true, force: true });
   });

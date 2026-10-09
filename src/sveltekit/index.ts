@@ -11,7 +11,7 @@ import { redactUrl } from '../request.js';
 import { truncate } from '../serialize.js';
 import { parseBrowserStack } from '../stack.js';
 
-export { moveClientSourceMaps } from './sourcemaps.js';
+export { composeServerSourceMaps, moveClientSourceMaps } from './sourcemaps.js';
 
 export type RadarHandleOptions = { client?: RadarClient; requestId?: (event: RequestEvent) => string | null | undefined };
 export type RadarHandleErrorOptions = { client?: RadarClient };

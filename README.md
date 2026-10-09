@@ -86,7 +86,7 @@ listenForClientErrors();
 export const handleError = handleErrorWithRadar();
 ```
 
-Com `build: { sourcemap: 'hidden' }` no Vite e `radar-sourcemaps` depois do build, os mapas saem de `build/client` e o servidor mostra o código original. Detalhes em [SvelteKit](https://radar.oconde.dev/docs/sdk/sveltekit/) e [Erros do navegador](https://radar.oconde.dev/docs/sdk/browser/).
+Com `build: { sourcemap: 'hidden' }` no Vite e `radar-sourcemaps` depois do build, os mapas saem de `build/client`, os do servidor passam a apontar direto para `src/`, e os erros mostram o código original. Detalhes em [SvelteKit](https://radar.oconde.dev/docs/sdk/sveltekit/) e [Erros do navegador](https://radar.oconde.dev/docs/sdk/browser/).
 
 ## Tarefas agendadas
 
