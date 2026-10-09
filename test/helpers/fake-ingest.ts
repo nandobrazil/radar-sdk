@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { gunzipSync } from 'node:zlib';
 import type { EventBatch, RadarEvent } from '../../src/protocol/index.js';
 
-export type ReceivedRequest = { path: string; headers: IncomingHttpHeaders; batch: EventBatch };
+export type ReceivedRequest = { method: string; path: string; headers: IncomingHttpHeaders; batch: EventBatch; body: unknown };
 export type FakeReply = { status: number; headers?: Record<string, string>; body?: unknown };
 export type Responder = (request: ReceivedRequest, index: number) => FakeReply;
 export type FakeIngest = { url: string; received: ReceivedRequest[]; events(): RadarEvent[]; close(): Promise<void> };
@@ -15,7 +15,9 @@ export async function startFakeIngest(respond: Responder = () => ({ status: 202,
     for await (const chunk of req) chunks.push(chunk as Buffer);
     let raw = Buffer.concat(chunks);
     if (req.headers['content-encoding'] === 'gzip') raw = gunzipSync(raw);
-    const entry: ReceivedRequest = { path: req.url ?? '', headers: req.headers, batch: JSON.parse(raw.toString('utf8')) as EventBatch };
+    const text = raw.toString('utf8');
+    const body: unknown = text ? JSON.parse(text) : null;
+    const entry: ReceivedRequest = { method: req.method ?? 'GET', path: req.url ?? '', headers: req.headers, batch: body as EventBatch, body };
     received.push(entry);
     const reply = respond(entry, received.length - 1);
     res.writeHead(reply.status, { 'content-type': 'application/json', ...reply.headers });
@@ -26,7 +28,7 @@ export async function startFakeIngest(respond: Responder = () => ({ status: 202,
   return {
     url: `http://127.0.0.1:${port}`,
     received,
-    events: () => received.flatMap((request) => request.batch.events),
+    events: () => received.filter((request) => request.path === '/api/v1/events').flatMap((request) => request.batch.events),
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }

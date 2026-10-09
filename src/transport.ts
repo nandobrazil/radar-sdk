@@ -1,6 +1,6 @@
 import { promisify } from 'node:util';
 import { gzip } from 'node:zlib';
-import { LIMITS, type EventBatch, type RadarEvent } from './protocol/index.js';
+import { LIMITS, type CheckInPayload, type EventBatch, type RadarEvent } from './protocol/index.js';
 import { describeError } from './util.js';
 
 const gzipAsync = promisify(gzip);
@@ -19,6 +19,7 @@ export type TransportConfig = {
   sdk: { name: string; version: string };
   environment: string;
   release?: string;
+  checkInBaseUrl?: string;
   onWarning?: (message: string, always: boolean) => void;
   flushIntervalMs?: number;
   maxQueue?: number;
@@ -38,6 +39,7 @@ export class Transport {
   private inFlight: Promise<boolean> | null = null;
   private nextAttemptAt = 0;
   private backoffMs = 0;
+  private unauthorizedUntil = 0;
   private stopped = false;
   private readonly warned = new Set<string>();
   private readonly timer: ReturnType<typeof setInterval>;
@@ -143,16 +145,58 @@ export class Transport {
         this.nextAttemptAt = Date.now() + Math.max(this.backoffMs, outcome.retryAfterMs ?? 0);
         return false;
       case 'unauthorized':
-        this.droppedCount += events.length + this.queue.length;
-        this.queue = [];
-        this.nextAttemptAt = Date.now() + UNAUTHORIZED_PAUSE_MS;
-        this.warn('unauthorized', `chave do Radar recusada (${outcome.status}); envios pausados por 10 minutos`, true);
+        this.droppedCount += events.length;
+        this.pauseUnauthorized(outcome.status);
         return false;
       case 'rejected':
         this.droppedCount += events.length;
         this.warn(`rejected_${outcome.status}`, `lote recusado pelo Radar (${outcome.status}); eventos descartados`, true);
         return true;
     }
+  }
+
+  async checkIn(slug: string, payload: CheckInPayload): Promise<void> {
+    if (this.stopped || !this.config.checkInBaseUrl || Date.now() < this.unauthorizedUntil) return;
+    let response: Response;
+    try {
+      response = await fetch(this.config.checkInBaseUrl + encodeURIComponent(slug), {
+        method: 'POST',
+        headers: this.headers(),
+        body: JSON.stringify(payload),
+        redirect: 'error',
+        signal: AbortSignal.timeout(this.config.requestTimeoutMs ?? 5000),
+      });
+    } catch (error) {
+      this.warn('checkin_network', `check-in no Radar falhou: ${describeError(error)}`, false);
+      return;
+    }
+    await response.arrayBuffer().catch(() => undefined);
+    if (response.ok) return;
+    if (response.status === 401 || response.status === 403) {
+      this.pauseUnauthorized(response.status);
+      return;
+    }
+    if (response.status === 404) {
+      this.warn(`checkin_unknown_${slug}`, `tarefa agendada "${slug}" não existe no projeto da chave; crie o monitor com esse slug no Radar`, true);
+      return;
+    }
+    this.warn(`checkin_rejected_${response.status}`, `check-in recusado pelo Radar (${response.status})`, false);
+  }
+
+  private pauseUnauthorized(status: number): void {
+    this.droppedCount += this.queue.length;
+    this.queue = [];
+    this.unauthorizedUntil = Date.now() + UNAUTHORIZED_PAUSE_MS;
+    this.nextAttemptAt = Math.max(this.nextAttemptAt, this.unauthorizedUntil);
+    this.warn('unauthorized', `chave do Radar recusada (${status}); envios pausados por 10 minutos`, true);
+  }
+
+  private headers(): Record<string, string> {
+    return {
+      'content-type': 'application/json',
+      authorization: `Bearer ${this.config.key}`,
+      'user-agent': `${this.config.sdk.name}/${this.config.sdk.version}`,
+    };
   }
 
   private requeue(events: RadarEvent[]): void {
@@ -167,11 +211,7 @@ export class Transport {
   private async post(batch: EventBatch): Promise<Outcome> {
     const json = JSON.stringify(batch);
     const compress = Buffer.byteLength(json) > GZIP_THRESHOLD_BYTES;
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-      authorization: `Bearer ${this.config.key}`,
-      'user-agent': `${this.config.sdk.name}/${this.config.sdk.version}`,
-    };
+    const headers = this.headers();
     if (compress) headers['content-encoding'] = 'gzip';
     let response: Response;
     try {

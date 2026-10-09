@@ -2,6 +2,14 @@ export const PROTOCOL_VERSION = 1;
 
 export const INGEST_PATH = '/api/v1/events';
 
+export const CHECKIN_PATH = '/api/v1/checkins/';
+
+export const RELEASES_PATH = '/api/v1/releases/';
+
+export const CHECKIN_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+export const CHECKIN_STATUSES = ['in_progress', 'ok', 'error'] as const;
+
 export const LIMITS = {
   batchBytes: 1_000_000,
   batchEvents: 500,
@@ -18,6 +26,7 @@ export const LIMITS = {
   depth: 6,
   arrayItems: 50,
   requestIdLength: 128,
+  checkInIdLength: 64,
 } as const;
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -106,6 +115,26 @@ export type IngestErrorCode =
   | 'payload_too_large'
   | 'invalid_batch'
   | 'quota_exceeded'
-  | 'rate_limited';
+  | 'rate_limited'
+  | 'unknown_monitor'
+  | 'invalid_checkin';
 
 export type IngestError = { error: { code: IngestErrorCode; message: string } };
+
+export type CheckInStatus = (typeof CHECKIN_STATUSES)[number];
+
+export type CheckInPayload = {
+  status: CheckInStatus;
+  checkInId?: string;
+  durationMs?: number;
+  environment?: string;
+  release?: string;
+};
+
+export type ReleaseSummary = {
+  release: string;
+  firstSeen: string | null;
+  newIssues: number;
+  events: number;
+  issues: { title: string; culprit: string | null; count: number; url: string }[];
+};

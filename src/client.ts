@@ -6,8 +6,13 @@ import { createMiddleware, type RadarMiddleware } from './express.js';
 import { levelEnabled, resolveOptions, type RadarOptions, type RedactMode, type ResolvedOptions } from './options.js';
 import { installProcessHandlers } from './process-handlers.js';
 import {
+  CHECKIN_PATH,
+  CHECKIN_SLUG,
+  CHECKIN_STATUSES,
   INGEST_PATH,
   LIMITS,
+  type CheckInPayload,
+  type CheckInStatus,
   type ErrorEvent,
   type LogEvent,
   type LogLevel,
@@ -27,6 +32,7 @@ import { SDK_NAME, SDK_VERSION } from './version.js';
 
 export type Attributes = Record<string, unknown>;
 export type LogRequestOptions = { level?: LogLevel; redact?: RedactMode };
+export type CheckInOptions = { checkInId?: string; durationMs?: number };
 
 type LogExtras = { request?: RequestInfo; mode?: RedactMode };
 
@@ -61,6 +67,7 @@ export class RadarClient {
           sdk: { name: SDK_NAME, version: SDK_VERSION },
           environment: this.options.environment,
           ...(this.options.release ? { release: this.options.release } : {}),
+          checkInBaseUrl: this.options.endpoint + CHECKIN_PATH,
           onWarning: (message, always) => (always ? this.writeWarning(message) : this.debugWarn(message)),
         });
       }
@@ -134,6 +141,48 @@ export class RadarClient {
 
   withContext<T>(fn: () => T, options: { requestId?: string } = {}): T {
     return runWithContext({ requestId: requestIdFrom(options.requestId), startedAt: performance.now() }, fn);
+  }
+
+  async checkIn(slug: string, status: CheckInStatus, options: CheckInOptions = {}): Promise<void> {
+    try {
+      if (!this.transport || this.closed) return;
+      if (typeof slug !== 'string' || !CHECKIN_SLUG.test(slug)) {
+        this.debugWarn(`slug de tarefa agendada inválido: ${String(slug).slice(0, 80)}`);
+        return;
+      }
+      if (!CHECKIN_STATUSES.includes(status)) return;
+      const checkInId = typeof options.checkInId === 'string' && options.checkInId ? options.checkInId.slice(0, LIMITS.checkInIdLength) : undefined;
+      const durationMs = typeof options.durationMs === 'number' && Number.isFinite(options.durationMs) && options.durationMs >= 0 ? Math.round(options.durationMs) : undefined;
+      const payload: CheckInPayload = {
+        status,
+        ...(checkInId ? { checkInId } : {}),
+        ...(durationMs !== undefined ? { durationMs } : {}),
+        environment: this.options.environment,
+        ...(this.options.release ? { release: this.options.release } : {}),
+      };
+      await this.transport.checkIn(slug, payload);
+    } catch (error) {
+      this.debugWarn(`check-in falhou: ${describeError(error)}`);
+    }
+  }
+
+  async cron<T>(slug: string, fn: () => T | Promise<T>): Promise<T> {
+    const checkInId = randomUUID();
+    const started = performance.now();
+    const execute = async (): Promise<T> => {
+      await this.checkIn(slug, 'in_progress', { checkInId });
+      try {
+        const result = await fn();
+        await this.checkIn(slug, 'ok', { checkInId, durationMs: elapsedSince(started) });
+        return result;
+      } catch (error) {
+        this.captureError(error, { cron: slug });
+        await this.checkIn(slug, 'error', { checkInId, durationMs: elapsedSince(started) });
+        throw error;
+      }
+    };
+    if (currentContext()) return execute();
+    return this.withContext(execute);
   }
 
   middleware(): RadarMiddleware {
