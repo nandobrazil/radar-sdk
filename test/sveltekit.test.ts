@@ -88,6 +88,25 @@ describe('radarHandle', () => {
     expect(JSON.stringify(server.events())).not.toContain('s3cr3t-reset-token');
   });
 
+  it('uses the request id chosen by the app when one is provided', async () => {
+    const handle = radarHandle({ client, requestId: (event) => (event as unknown as { locals: { requestId?: string } }).locals.requestId });
+    const event = requestEvent({ url: 'https://shop.test/links', headers: { 'x-request-id': 'from-header' }, routeId: '/links' });
+    (event as unknown as { locals: { requestId: string } }).locals = { requestId: 'app-req-1' };
+    const response = await handle({
+      event,
+      resolve: async () => {
+        client.info('inside.handler');
+        return new Response('ok');
+      },
+    });
+    expect(response.headers.get('x-request-id')).toBe('app-req-1');
+    await client.flush();
+    expect(logs().find((item) => item.message === 'inside.handler')!.requestId).toBe('app-req-1');
+    const fallback = radarHandle({ client, requestId: () => undefined });
+    const second = await fallback({ event: requestEvent({ url: 'https://shop.test/a', headers: { 'x-request-id': 'from-header' } }), resolve: async () => new Response('ok') });
+    expect(second.headers.get('x-request-id')).toBe('from-header');
+  });
+
   it('skips ignored paths, still tags immutable redirects and logs 500 when resolve throws', async () => {
     const handle = radarHandle({ client });
     await handle({ event: requestEvent({ url: 'https://shop.test/healthz' }), resolve: async () => new Response('ok') });

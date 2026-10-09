@@ -12,7 +12,7 @@ import { parseBrowserStack } from '../stack.js';
 
 export { moveClientSourceMaps } from './sourcemaps.js';
 
-export type RadarHandleOptions = { client?: RadarClient };
+export type RadarHandleOptions = { client?: RadarClient; requestId?: (event: RequestEvent) => string | null | undefined };
 
 export type ClientErrorsOptions = {
   clientDir?: string;
@@ -41,7 +41,7 @@ export function routeName(id: string | null | undefined): string | undefined {
   return id.replace(/\/\([^)/]+\)/g, '') || '/';
 }
 
-function contextFor(event: RequestEvent): RadarContext {
+function contextFor(event: RequestEvent, chooseRequestId?: RadarHandleOptions['requestId']): RadarContext {
   const path = `${event.url.pathname}${event.url.search}`;
   const ip = clientAddress(event);
   const req: RequestLike = {
@@ -54,7 +54,8 @@ function contextFor(event: RequestEvent): RadarContext {
     ...(ip ? { ip } : {}),
   };
   const route = routeName(event.route.id);
-  return { requestId: requestIdFrom(event.request.headers.get('x-request-id')), startedAt: performance.now(), req, ...(route ? { route } : {}) };
+  const chosen = chooseRequestId?.(event);
+  return { requestId: requestIdFrom(chosen || event.request.headers.get('x-request-id')), startedAt: performance.now(), req, ...(route ? { route } : {}) };
 }
 
 function withRequestId(response: Response, requestId: string): Response {
@@ -73,7 +74,7 @@ export function radarHandle(options: RadarHandleOptions = {}): Handle {
   return async ({ event, resolve: resolveEvent }) => {
     let context: RadarContext;
     try {
-      context = contextFor(event);
+      context = contextFor(event, options.requestId);
     } catch {
       return resolveEvent(event);
     }
