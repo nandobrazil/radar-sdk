@@ -2,6 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { SourceMap } from 'node:module';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { enclosingFunctionName } from './function-name.js';
 import { LIMITS, type ExceptionInfo, type StackFrame } from './protocol/index.js';
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
@@ -10,12 +11,12 @@ const MAPPING_URL = /\/\/[#@]\s*sourceMappingURL=(\S+)\s*$/;
 
 type LoadedMap = { map: SourceMap; baseDir: string; sources: string[]; contents: (string | null)[]; lines: Map<number, string[]> };
 type LoadedFile = { lines: string[]; map: LoadedMap | null };
-type MappedFrame = { frame: StackFrame; lines: string[] | null };
+type MappedFrame = { frame: StackFrame; lines: string[] | null; original: boolean };
 type MapPayload = { sources?: string[]; sourcesContent?: (string | null)[]; sourceRoot?: string };
 type MapEntry = { originalSource?: string; originalLine?: number; originalColumn?: number };
 
 export type MapLocator = (file: string) => string | null;
-export type EnrichOptions = { mapLocator?: MapLocator };
+export type EnrichOptions = { mapLocator?: MapLocator; inferFunctionNames?: boolean };
 
 const cache = new Map<string, Promise<LoadedFile | null>>();
 
@@ -28,8 +29,9 @@ export async function enrichFrames(frames: StackFrame[], cwd: string = process.c
   let withContext = 0;
   for (const frame of frames) {
     try {
-      const { frame: located, lines } = await mapFrame(frame, options.mapLocator);
-      const mapped = located.inApp && isLibraryPath(located.file) ? { ...located, inApp: false } : located;
+      const { frame: located, lines, original } = await mapFrame(frame, options.mapLocator);
+      const named = options.inferFunctionNames && original && !located.fn && lines && located.line ? withInferredName(located, lines) : located;
+      const mapped = named.inApp && isLibraryPath(named.file) ? { ...named, inApp: false } : named;
       let next = mapped;
       if (mapped.inApp && lines && mapped.line && withContext < LIMITS.contextFrames) {
         const context = contextFor(lines, mapped.line);
@@ -52,6 +54,11 @@ export async function enrichException(exception: ExceptionInfo, cwd: string = pr
   return { ...exception, frames, cause: await enrichException(exception.cause, cwd, options) };
 }
 
+function withInferredName(frame: StackFrame, lines: string[]): StackFrame {
+  const fn = enclosingFunctionName(lines, frame.line ?? 0, frame.col);
+  return fn ? { ...frame, fn } : frame;
+}
+
 function isLibraryPath(file: string): boolean {
   return file.includes('/node_modules/') || file.includes('\\node_modules\\');
 }
@@ -63,18 +70,18 @@ export function relativize(file: string, cwd: string): string {
 }
 
 async function mapFrame(frame: StackFrame, locator?: MapLocator): Promise<MappedFrame> {
-  if (!frame.line || !isAbsolute(frame.file)) return { frame, lines: null };
+  if (!frame.line || !isAbsolute(frame.file)) return { frame, lines: null, original: false };
   const file = await loadFile(frame.file, locator);
-  if (!file) return { frame, lines: null };
-  if (!file.map) return { frame, lines: file.lines };
+  if (!file) return { frame, lines: null, original: false };
+  if (!file.map) return { frame, lines: file.lines, original: false };
   const entry = file.map.map.findEntry(frame.line - 1, (frame.col ?? 1) - 1) as MapEntry;
-  if (typeof entry.originalSource !== 'string' || typeof entry.originalLine !== 'number') return { frame, lines: file.lines };
+  if (typeof entry.originalSource !== 'string' || typeof entry.originalLine !== 'number') return { frame, lines: file.lines, original: false };
   const originalPath = resolveSource(file.map, entry.originalSource);
   const mapped: StackFrame = { ...frame, file: originalPath, line: entry.originalLine + 1, col: (entry.originalColumn ?? 0) + 1 };
   const lines = embeddedLines(file.map, file.map.sources.indexOf(entry.originalSource));
-  if (lines) return { frame: mapped, lines };
+  if (lines) return { frame: mapped, lines, original: true };
   const original = await loadFile(originalPath);
-  return { frame: mapped, lines: original?.lines ?? null };
+  return { frame: mapped, lines: original?.lines ?? null, original: true };
 }
 
 function embeddedLines(map: LoadedMap, index: number): string[] | null {

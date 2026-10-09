@@ -215,6 +215,15 @@ describe('radarClientErrors', () => {
     expect(raw).not.toContain('userAgent');
   });
 
+  it('names the browser function from the original source', async () => {
+    const handler = radarClientErrors({ clientDir, sourceMapsDir: mapsDir, client });
+    await post(handler, JSON.stringify({ name: 'Error', message: 'empty cart', stack: stack.replace('at checkout (', 'at a (') , path: '/cart' }));
+    await client.flush();
+    const [top, external] = errors()[0]!.exception.frames;
+    expect(top!.fn).toBe('checkout');
+    expect(external!.fn).toBeUndefined();
+  });
+
   it('refuses oversized, malformed and too frequent reports', async () => {
     const handler = radarClientErrors({ clientDir, sourceMapsDir: mapsDir, maxPerMinute: 3, maxBytes: 256, client });
     expect((await post(handler, JSON.stringify({ message: 'x'.repeat(400), path: '/' }), '192.0.2.1')).status).toBe(413);
@@ -254,13 +263,14 @@ describe('radarClientErrors', () => {
     }
   });
 
-  it('keeps browser issues stable across deploys: no minified names, unmapped chunks out of the app', async () => {
+  it('keeps browser issues stable across deploys: original names instead of minified ones, unmapped chunks out of the app', async () => {
     const handler = radarClientErrors({ clientDir, sourceMapsDir: mapsDir, client });
-    const withMissingMap = `${stack.split('\n').slice(0, 2).join('\n')}\n    at q (https://shop.test/_app/immutable/chunks/hashed-Bx9.js:1:10)`;
+    const minified = stack.split('\n').slice(0, 2).join('\n').replace('at checkout (', 'at q (');
+    const withMissingMap = `${minified}\n    at q (https://shop.test/_app/immutable/chunks/hashed-Bx9.js:1:10)`;
     await post(handler, JSON.stringify({ name: 'Error', message: 'empty cart', stack: withMissingMap, path: '/cart' }));
     await client.flush();
     const [mapped, unmapped] = errors()[0]!.exception.frames;
-    expect(mapped!.fn).toBeUndefined();
+    expect(mapped!.fn).toBe('checkout');
     expect(mapped!.inApp).toBe(true);
     expect(unmapped!.inApp).toBe(false);
   });

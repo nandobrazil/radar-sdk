@@ -247,7 +247,7 @@ export function radarClientErrors(options: ClientErrorsOptions = {}): RequestHan
         request: routeOnly ? null : { method: 'GET', url: path },
         attrs: { source: 'browser' },
         runtime: null,
-        enrich: { mapLocator },
+        enrich: { mapLocator, inferFunctionNames: true },
       });
       return new Response(null, { status: 204 });
     } catch {
