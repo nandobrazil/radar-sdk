@@ -24,6 +24,7 @@ const MAX_MESSAGE = 2000;
 const MAX_STACK = 12_000;
 const ACTION_WINDOW_MS = 10_000;
 const MAX_LABEL = 60;
+const MAX_TEXT_READ = 500;
 const INTERACTIVE = 'button, a, [role="button"], [role="link"], [role="menuitem"], [role="tab"], [role="checkbox"], [role="switch"], input, select, textarea, summary, label';
 const BUTTON_INPUTS = new Set(['button', 'submit', 'reset', 'image']);
 const FIELDS = new Set(['input', 'select', 'textarea']);
@@ -67,6 +68,7 @@ function describeElement(target: unknown, kind: UiAction['kind']): { element: st
   if (!node || typeof node !== 'object' || typeof node.tagName !== 'string') return null;
   const found = kind === 'click' && typeof node.closest === 'function' ? node.closest(INTERACTIVE) : node;
   const element = found ?? node;
+  const control = found !== null;
   const tag = (element.tagName ?? '').toLowerCase();
   const type = (attribute(element, 'type') ?? '').toLowerCase();
   const role = attribute(element, 'role');
@@ -74,7 +76,7 @@ function describeElement(target: unknown, kind: UiAction['kind']): { element: st
   const named = attribute(element, 'aria-label') ?? attribute(element, 'title');
   const fieldLabel = FIELDS.has(tag) && !BUTTON_INPUTS.has(type) ? (attribute(element, 'name') ?? attribute(element, 'placeholder') ?? attribute(element, 'id')) : null;
   const buttonValue = tag === 'input' && BUTTON_INPUTS.has(type) ? attribute(element, 'value') : null;
-  const text = FIELDS.has(tag) || tag === 'form' ? null : element.textContent;
+  const text = !control || FIELDS.has(tag) || tag === 'form' ? null : (element.textContent ?? '').slice(0, MAX_TEXT_READ);
   const formLabel = tag === 'form' ? (attribute(element, 'name') ?? attribute(element, 'id')) : null;
   const label = cleanLabel(named ?? fieldLabel ?? buttonValue ?? formLabel ?? (cleanLabel(text) || attribute(element, 'id')));
   return { element: name.slice(0, 24), label };

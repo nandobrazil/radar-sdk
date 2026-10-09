@@ -32,3 +32,14 @@ describe('enclosingFunctionName', () => {
     expect(nameAt(['<script lang="ts">', '  function go() {', '    navigate();', '  }', '</script>', '', '<button onclick={() => crash()}>Ir</button>'].join('\n'), 'crash()')).toBeUndefined();
   });
 });
+
+describe('enclosingFunctionName on huge lines', () => {
+  it('stays fast when the header of a block is a very long line', () => {
+    const noise = `const data = (${'a, '.repeat(20_000)}) => {`;
+    const lines = [noise, `function render(${'x: number, '.repeat(5_000)}) {`, '  return compute();', '}', '};'];
+    const started = performance.now();
+    expect(enclosingFunctionName(lines, 3, 3)).toBe('render');
+    expect(enclosingFunctionName([noise, '  boom();', '};'], 2, 3)).toBe('data');
+    expect(performance.now() - started).toBeLessThan(200);
+  });
+});

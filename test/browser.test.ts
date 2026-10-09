@@ -169,6 +169,16 @@ describe('listenForClientErrors with the last action', () => {
     expect(JSON.stringify(sentBodies())).not.toContain('segredo123');
   });
 
+  it('never reads the text of a container that is not a control', async () => {
+    const { listenForClientErrors } = await load();
+    listenForClientErrors();
+    const container = element('div', { id: 'pedido-resumo' }, 'Marina Souza, CPF 123.456.789-09, Rua das Flores 10', false);
+    fire('click', { target: container });
+    fire('error', { error: new Error('summary') });
+    expect(sentBodies()[0]!.action).toMatchObject({ kind: 'click', element: 'div', label: 'pedido-resumo' });
+    expect(JSON.stringify(sentBodies())).not.toContain('Marina');
+  });
+
   it('leaves out actions older than ten seconds and can be turned off', async () => {
     vi.useFakeTimers();
     try {
