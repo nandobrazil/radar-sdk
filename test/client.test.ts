@@ -140,6 +140,23 @@ describe('RadarClient errors', () => {
   });
 });
 
+describe('RadarClient.captureException', () => {
+  it('sends a prepared exception with an explicit request, no runtime and masked attributes', async () => {
+    await runWithContext({ requestId: 'relay-1', startedAt: 0, user: { id: 'u9' } }, async () => {
+      client.captureException(
+        { type: 'TypeError', message: 'x is null', frames: [{ fn: 'click', file: 'https://a.test/x.js', line: 1, col: 2, inApp: false }] },
+        { handled: false, request: { method: 'GET', url: '/checkout' }, runtime: null, attrs: { source: 'browser', token: 'abcdefghijklmnopqrstuvwxyz' } },
+      );
+    });
+    await client.flush();
+    const [event] = errors();
+    expect(event).toMatchObject({ handled: false, level: 'error', requestId: 'relay-1', user: { id: 'u9' }, request: { method: 'GET', url: '/checkout' } });
+    expect(event!.runtime).toBeUndefined();
+    expect(event!.attrs!.source).toBe('browser');
+    expect(String(event!.attrs!.token)).toMatch(/^abcd…wxyz #[0-9a-f]{8}$/);
+  });
+});
+
 describe('RadarClient.withContext', () => {
   it('runs a job in a fresh context with its own requestId and returns the result', async () => {
     const result = await client.withContext(async () => {

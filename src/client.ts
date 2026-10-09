@@ -14,6 +14,7 @@ import {
   type CheckInPayload,
   type CheckInStatus,
   type ErrorEvent,
+  type ExceptionInfo,
   type LogEvent,
   type LogLevel,
   type RadarEvent,
@@ -24,7 +25,7 @@ import {
 import { pathParams, redactPath, requestInfo, requestPath, requestRoute } from './request.js';
 import { setFingerprintSecret } from './redact.js';
 import { prepareAttrs, truncate } from './serialize.js';
-import { enrichException } from './source.js';
+import { enrichException, type EnrichOptions } from './source.js';
 import { exceptionInfo } from './stack.js';
 import { Transport } from './transport.js';
 import { describeError, elapsedSince } from './util.js';
@@ -35,6 +36,15 @@ export type LogRequestOptions = { level?: LogLevel; redact?: RedactMode };
 export type CheckInOptions = { checkInId?: string; durationMs?: number };
 
 type LogExtras = { request?: RequestInfo; mode?: RedactMode };
+
+export type CaptureExceptionOptions = {
+  handled?: boolean;
+  level?: 'error' | 'fatal';
+  request?: RequestInfo;
+  attrs?: Attributes;
+  runtime?: RuntimeInfo | null;
+  enrich?: EnrichOptions;
+};
 
 export class RadarClient {
   private options: ResolvedOptions = resolveOptions({}, {});
@@ -244,31 +254,42 @@ export class RadarClient {
     this.transport?.enqueue(event);
   }
 
+  captureException(exception: ExceptionInfo, options: CaptureExceptionOptions = {}): void {
+    this.safely(() => this.emitException(exception, options));
+  }
+
   private emitError(error: unknown, data: Attributes | undefined, level: 'error' | 'fatal', handled: boolean): void {
     if (this.closed) return;
     if (typeof error === 'object' && error !== null) {
       if (this.captured.has(error)) return;
       this.captured.add(error);
     }
+    this.emitException(exceptionInfo(error), { level, handled, ...(data !== undefined ? { attrs: data } : {}) }, error instanceof Error ? error.stack : undefined);
+  }
+
+  private emitException(exception: ExceptionInfo, options: CaptureExceptionOptions, stack?: string): void {
+    if (this.closed) return;
     const context = currentContext();
     const mode = this.options.redact;
+    const request = options.request ?? (context?.req ? requestInfo(context.req, mode, { route: context.route }, this.options.requestDetail) : undefined);
+    const runtime = options.runtime === undefined ? runtimeInfo() : options.runtime;
     const event: ErrorEvent = {
       type: 'error',
       ts: Date.now(),
-      level,
-      handled,
-      exception: exceptionInfo(error),
+      level: options.level ?? 'error',
+      handled: options.handled ?? true,
+      exception,
       ...(context ? { requestId: context.requestId } : {}),
-      ...(context?.req ? { request: requestInfo(context.req, mode, { route: context.route }, this.options.requestDetail) } : {}),
+      ...(request ? { request } : {}),
       ...(context?.user ? { user: context.user } : {}),
-      runtime: runtimeInfo(),
-      ...(data !== undefined ? { attrs: prepareAttrs(data, mode) } : {}),
+      ...(runtime ? { runtime } : {}),
+      ...(options.attrs !== undefined ? { attrs: prepareAttrs(options.attrs, mode) } : {}),
     };
-    this.print(event, error instanceof Error ? error.stack : undefined);
+    this.print(event, stack);
     if (!this.transport) return;
     this.transport.enqueue(() =>
-      enrichException(event.exception).then(
-        (exception) => ({ ...event, exception }),
+      enrichException(event.exception, process.cwd(), options.enrich).then(
+        (enriched) => ({ ...event, exception: enriched }),
         () => event,
       ),
     );
