@@ -28,7 +28,8 @@ export async function enrichFrames(frames: StackFrame[], cwd: string = process.c
   let withContext = 0;
   for (const frame of frames) {
     try {
-      const { frame: mapped, lines } = await mapFrame(frame, options.mapLocator);
+      const { frame: located, lines } = await mapFrame(frame, options.mapLocator);
+      const mapped = located.inApp && isLibraryPath(located.file) ? { ...located, inApp: false } : located;
       let next = mapped;
       if (mapped.inApp && lines && mapped.line && withContext < LIMITS.contextFrames) {
         const context = contextFor(lines, mapped.line);
@@ -49,6 +50,10 @@ export async function enrichException(exception: ExceptionInfo, cwd: string = pr
   const frames = await enrichFrames(exception.frames, cwd, options);
   if (!exception.cause) return { ...exception, frames };
   return { ...exception, frames, cause: await enrichException(exception.cause, cwd, options) };
+}
+
+function isLibraryPath(file: string): boolean {
+  return file.includes('/node_modules/') || file.includes('\\node_modules\\');
 }
 
 export function relativize(file: string, cwd: string): string {

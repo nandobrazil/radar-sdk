@@ -124,6 +124,20 @@ describe('enrichFrames with a map locator', () => {
   });
 });
 
+describe('enrichFrames with bundled libraries', () => {
+  it('marks frames that map into node_modules as library code without context', async () => {
+    const file = compile('bundled/out', { inlineSources: true, keepSource: false });
+    const mapPath = `${file}.map`;
+    const map = JSON.parse(readFileSync(mapPath, 'utf8')) as { sources: string[] };
+    map.sources = ['../node_modules/some-lib/index.ts'];
+    writeFileSync(mapPath, JSON.stringify(map));
+    const [top] = await enrichFrames(parseStack(stackOf(file)), root);
+    expect(top!.file).toBe('bundled/out/node_modules/some-lib/index.ts');
+    expect(top!.inApp).toBe(false);
+    expect(top!.context).toBeUndefined();
+  });
+});
+
 describe('enrichException', () => {
   it('enriches the cause chain', async () => {
     const file = compile('cause', { inlineSources: true, keepSource: false });
