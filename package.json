@@ -1,7 +1,7 @@
 {
   "name": "@oconde/radar",
-  "version": "0.1.0",
-  "description": "SDK do Radar: logs, erros e contexto de requisi\u00e7\u00e3o para apps Node e NestJS",
+  "version": "0.2.0",
+  "description": "SDK do Radar para Node.js, NestJS, Express e SvelteKit: logs, erros com trecho de c\u00f3digo, requisi\u00e7\u00f5es, tarefas agendadas e erros do navegador.",
   "license": "MIT",
   "author": "Fernando Conde <me@oconde.dev>",
   "type": "module",
@@ -91,6 +91,7 @@
     "dist",
     "README.md",
     "PROTOCOL.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {

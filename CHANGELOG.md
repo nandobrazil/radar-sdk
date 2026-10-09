@@ -1,0 +1,26 @@
+# Changelog
+
+## 0.2.0
+
+### Novo
+
+- `@oconde/radar/sveltekit`: `radarHandle` (contexto, `x-request-id`, log `http.request`; opção `requestId` para usar o id do app), `radarHandleError`, `radarClientErrors` (rota que recebe erros do navegador) e `moveClientSourceMaps`.
+- `@oconde/radar/browser`: `reportClientError`, `handleErrorWithRadar` e `listenForClientErrors`, sem dependência de Node.
+- Comando `radar-sourcemaps [buildDir]`: tira os source maps de `build/client` depois do `vite build` e reescreve os caminhos para continuarem apontando para o código.
+- `radar.withContext`, `radar.checkIn` e `radar.cron` para workers e tarefas agendadas.
+- `radar.captureException` para quem já tem a exceção montada.
+
+### Mudanças de comportamento
+
+- **Agrupamento de erros:** frames que, pelo source map, caem em `node_modules` deixam de contar como código do app, e arquivos gerados com `sourcemap: 'hidden'` passam a usar o `.map` ao lado. As duas coisas mudam a impressão digital de alguns erros: no deploy que atualizar o SDK, erros já conhecidos podem reaparecer como novos uma vez.
+- `radarHandleError()` e `handleErrorWithRadar()` sem handler interno imprimem o erro no console e deixam o SvelteKit usar a mensagem padrão (antes devolviam "Internal Error", inclusive no 404).
+- Um `x-request-id` com caracteres fora do ASCII imprimível é trocado por um id gerado.
+- Check-ins cortam `environment` em 64 caracteres, `release` em 128 e `durationMs` em 7 dias, como o servidor exige.
+
+### Correções
+
+- Express: segredos em parâmetros do caminho (como `/reset/:token`) eram enviados sem máscara quando a requisição terminava no middleware de erro do app.
+
+## 0.1.0
+
+Primeira versão: NestJS, Express, logs, erros com trecho de código, requisições e mascaramento de dados sensíveis.
