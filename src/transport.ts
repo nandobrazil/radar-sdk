@@ -8,6 +8,7 @@ const gzipAsync = promisify(gzip);
 const MAX_BATCH_BYTES = 900_000;
 const GZIP_THRESHOLD_BYTES = 8192;
 const MAX_BACKOFF_MS = 30_000;
+const MAX_RETRY_AFTER_MS = 86_400_000;
 const UNAUTHORIZED_PAUSE_MS = 10 * 60_000;
 
 export type Pending = RadarEvent | (() => Promise<RadarEvent>);
@@ -178,6 +179,7 @@ export class Transport {
         method: 'POST',
         headers,
         body: compress ? await gzipAsync(json) : json,
+        redirect: 'error',
         signal: AbortSignal.timeout(this.config.requestTimeoutMs ?? 5000),
       });
     } catch (error) {
@@ -199,12 +201,12 @@ export class Transport {
   }
 }
 
-function retryAfterMs(header: string | null): number | undefined {
+export function retryAfterMs(header: string | null): number | undefined {
   if (!header) return undefined;
   const seconds = Number(header);
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  if (Number.isFinite(seconds)) return Math.min(Math.max(0, seconds * 1000), MAX_RETRY_AFTER_MS);
   const date = Date.parse(header);
-  return Number.isNaN(date) ? undefined : Math.max(0, date - Date.now());
+  return Number.isNaN(date) ? undefined : Math.min(Math.max(0, date - Date.now()), MAX_RETRY_AFTER_MS);
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {

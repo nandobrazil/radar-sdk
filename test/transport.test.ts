@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LogEvent } from '../src/protocol/index.js';
-import { Transport, type TransportConfig } from '../src/transport.js';
+import { retryAfterMs, Transport, type TransportConfig } from '../src/transport.js';
 import { startFakeIngest, type FakeIngest, type Responder } from './helpers/fake-ingest.js';
 
 const servers: FakeIngest[] = [];
@@ -162,5 +162,23 @@ describe('Transport', () => {
     await transport.flush(5000);
     expect(server.received).toHaveLength(2);
     expect(server.events()).toHaveLength(3);
+  });
+
+  it('never follows a redirect, so events and the key never reach another host', async () => {
+    const other = await serve();
+    const server = await serve(() => ({ status: 307, headers: { location: `${other.url}/api/v1/events` } }));
+    const transport = createTransport(server.url);
+    transport.enqueue(log('stay here'));
+    await transport.flush(1000);
+    expect(server.received).toHaveLength(1);
+    expect(other.received).toHaveLength(0);
+    expect(transport.pending).toBe(1);
+  });
+
+  it('caps the wait a server can ask for at one day', () => {
+    expect(retryAfterMs('120')).toBe(120_000);
+    expect(retryAfterMs(String(365 * 86_400))).toBe(86_400_000);
+    expect(retryAfterMs(new Date(Date.now() + 30 * 86_400_000).toUTCString())).toBe(86_400_000);
+    expect(retryAfterMs('nonsense')).toBeUndefined();
   });
 });
