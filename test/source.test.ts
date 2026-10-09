@@ -124,6 +124,19 @@ describe('enrichFrames with a map locator', () => {
   });
 });
 
+describe('enrichFrames with hidden server source maps', () => {
+  it('uses the .map next to a file that has no sourceMappingURL comment', async () => {
+    const file = compile('hidden-sibling', { inlineSources: true, keepSource: false });
+    const stack = stackOf(file);
+    writeFileSync(file, readFileSync(file, 'utf8').replace(/\/\/# sourceMappingURL=.*$/m, ''));
+    clearSourceCache();
+    const [top] = await enrichFrames(parseStack(stack), root);
+    expect(top!.file).toBe('hidden-sibling/src/thrower.ts');
+    expect(top!.line).toBe(5);
+    expect(top!.context?.line).toContain('throw new Error');
+  });
+});
+
 describe('enrichFrames with bundled libraries', () => {
   it('marks frames that map into node_modules as library code without context', async () => {
     const file = compile('bundled/out', { inlineSources: true, keepSource: false });

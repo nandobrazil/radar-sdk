@@ -35,7 +35,8 @@ describe('package output', () => {
   it('embeds the package version', () => {
     const script = `const { radar } = require(${JSON.stringify(join(root, 'dist/index.cjs'))}); process.stdout.write(typeof radar.init);`;
     expect(execFileSync(process.execPath, ['-e', script], { encoding: 'utf8' })).toBe('function');
-    const built = execFileSync('grep', ['-c', '0.1.0', join(root, 'dist/index.cjs')], { encoding: 'utf8' });
+    const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string };
+    const built = execFileSync('grep', ['-c', version, join(root, 'dist/index.cjs')], { encoding: 'utf8' });
     expect(Number(built.trim())).toBeGreaterThan(0);
   });
 
