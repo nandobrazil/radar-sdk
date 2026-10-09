@@ -1,7 +1,7 @@
 {
   "name": "@oconde/radar",
   "version": "0.1.0",
-  "description": "SDK do Radar: logs, erros e contexto de requisição para apps Node e NestJS",
+  "description": "SDK do Radar: logs, erros e contexto de requisi\u00e7\u00e3o para apps Node e NestJS",
   "license": "MIT",
   "author": "Fernando Conde <me@oconde.dev>",
   "type": "module",
@@ -15,6 +15,9 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "radar-sourcemaps": "./dist/bin/radar-sourcemaps.js"
+  },
   "exports": {
     ".": {
       "import": {
@@ -46,6 +49,26 @@
         "default": "./dist/protocol/index.cjs"
       }
     },
+    "./sveltekit": {
+      "import": {
+        "types": "./dist/sveltekit/index.d.ts",
+        "default": "./dist/sveltekit/index.js"
+      },
+      "require": {
+        "types": "./dist/sveltekit/index.d.cts",
+        "default": "./dist/sveltekit/index.cjs"
+      }
+    },
+    "./browser": {
+      "import": {
+        "types": "./dist/browser/index.d.ts",
+        "default": "./dist/browser/index.js"
+      },
+      "require": {
+        "types": "./dist/browser/index.d.cts",
+        "default": "./dist/browser/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -55,6 +78,12 @@
       ],
       "protocol": [
         "./dist/protocol/index.d.cts"
+      ],
+      "sveltekit": [
+        "./dist/sveltekit/index.d.cts"
+      ],
+      "browser": [
+        "./dist/browser/index.d.cts"
       ]
     }
   },
@@ -65,7 +94,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsup",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "smoke:nest10": "bash scripts/smoke-nest10.sh",
@@ -74,7 +103,8 @@
   "peerDependencies": {
     "@nestjs/common": ">=10",
     "@nestjs/core": ">=10",
-    "rxjs": ">=7"
+    "rxjs": ">=7",
+    "@sveltejs/kit": ">=2"
   },
   "peerDependenciesMeta": {
     "@nestjs/common": {
@@ -84,6 +114,9 @@
       "optional": true
     },
     "rxjs": {
+      "optional": true
+    },
+    "@sveltejs/kit": {
       "optional": true
     }
   },
