@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import type { Handle, HandleServerError, RequestEvent, RequestHandler } from '@sveltejs/kit';
 import ts from 'typescript';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RadarClient } from '../src/client.js';
 import type { ErrorEvent, LogEvent } from '../src/protocol/index.js';
 import { moveClientSourceMaps, radarClientErrors, radarHandle, radarHandleError, routeName } from '../src/sveltekit/index.js';
@@ -102,6 +102,9 @@ describe('radarHandle', () => {
     expect(response.headers.get('x-request-id')).toBe('app-req-1');
     await client.flush();
     expect(logs().find((item) => item.message === 'inside.handler')!.requestId).toBe('app-req-1');
+    const unsafe = radarHandle({ client, requestId: () => 'bad\nid\u0000' });
+    const tagged = await unsafe({ event: requestEvent({ url: 'https://shop.test/b' }), resolve: async () => new Response('ok') });
+    expect(tagged.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/);
     const fallback = radarHandle({ client, requestId: () => undefined });
     const second = await fallback({ event: requestEvent({ url: 'https://shop.test/a', headers: { 'x-request-id': 'from-header' } }), resolve: async () => new Response('ok') });
     expect(second.headers.get('x-request-id')).toBe('from-header');
@@ -148,7 +151,11 @@ describe('radarHandle', () => {
     await client.flush();
     expect(errors().map((item) => item.exception.message)).toEqual(['db down']);
     expect(errors()[0]!.request).toMatchObject({ method: 'POST', url: '/checkout', route: '/checkout' });
-    expect(await radarHandleError(undefined, { client })({ error: new Error('x'), event, status: 500, message: 'Internal Error' })).toEqual({ message: 'Internal Error' });
+    const printed = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(await radarHandleError(undefined, { client })({ error: new Error('x'), event, status: 500, message: 'Internal Error' })).toBeUndefined();
+    expect(await radarHandleError(undefined, { client })({ error: new Error('missing'), event, status: 404, message: 'Not Found' })).toBeUndefined();
+    expect(printed).toHaveBeenCalledTimes(1);
+    printed.mockRestore();
   });
 });
 
@@ -228,6 +235,57 @@ describe('radarClientErrors', () => {
       expect(frame.context).toBeUndefined();
     }
   });
+
+  it('never reads absolute or network paths sent as frames, nor maps next to them', async () => {
+    const outside = join(root, 'outside');
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(join(outside, 'secret.js'), 'module.exports = 1;\n');
+    writeFileSync(join(outside, 'secret.js.map'), JSON.stringify({ version: 3, sources: ['ORIGINAL_SECRET_SOURCE.ts'], sourcesContent: ['SECRET'], mappings: 'AAAA', names: [] }));
+    const handler = radarClientErrors({ clientDir, sourceMapsDir: mapsDir, client });
+    const hostile = ['Error: x', `    at f (${join(outside, 'secret.js')}:1:1)`, '    at g (\\\\attacker.test\\share\\x.js:1:1)', '    at h (/etc/passwd:1:1)'].join('\n');
+    expect((await post(handler, JSON.stringify({ message: 'x', stack: hostile, path: '/' }))).status).toBe(204);
+    await client.flush();
+    const raw = JSON.stringify(errors());
+    expect(raw).not.toContain('ORIGINAL_SECRET_SOURCE');
+    expect(raw).not.toContain('SECRET"');
+    for (const frame of errors()[0]!.exception.frames) {
+      expect(frame.inApp).toBe(false);
+      expect(isAbsolute(frame.file)).toBe(false);
+    }
+  });
+
+  it('keeps browser issues stable across deploys: no minified names, unmapped chunks out of the app', async () => {
+    const handler = radarClientErrors({ clientDir, sourceMapsDir: mapsDir, client });
+    const withMissingMap = `${stack.split('\n').slice(0, 2).join('\n')}\n    at q (https://shop.test/_app/immutable/chunks/hashed-Bx9.js:1:10)`;
+    await post(handler, JSON.stringify({ name: 'Error', message: 'empty cart', stack: withMissingMap, path: '/cart' }));
+    await client.flush();
+    const [mapped, unmapped] = errors()[0]!.exception.frames;
+    expect(mapped!.fn).toBeUndefined();
+    expect(mapped!.inApp).toBe(true);
+    expect(unmapped!.inApp).toBe(false);
+  });
+
+  it('caps reports for the whole route and counts an IPv6 /64 as one visitor', async () => {
+    const handler = radarClientErrors({ clientDir, sourceMapsDir: mapsDir, maxPerMinute: 1, maxGlobalPerMinute: 3, client });
+    expect((await post(handler, JSON.stringify({ message: 'a', path: '/' }), '2001:db8:1:2::9')).status).toBe(204);
+    expect((await post(handler, JSON.stringify({ message: 'b', path: '/' }), '2001:db8:1:2::5')).status).toBe(429);
+    expect((await post(handler, JSON.stringify({ message: 'c', path: '/' }), '192.0.2.10')).status).toBe(204);
+    expect((await post(handler, JSON.stringify({ message: 'd', path: '/' }), '192.0.2.11')).status).toBe(204);
+    expect((await post(handler, JSON.stringify({ message: 'e', path: '/' }), '192.0.2.12')).status).toBe(429);
+  });
+
+  it('sends neither the page path nor its query in route mode', async () => {
+    const routeClient = new RadarClient();
+    routeClient.init({ key: 'rk_test', endpoint: server.url, environment: 'test', captureUnhandled: false, requestDetail: 'route' });
+    const handler = radarClientErrors({ clientDir, sourceMapsDir: mapsDir, client: routeClient });
+    const inline = 'Error: x\n    at https://shop.test/patients/9f2c1a/notes?draft=1:3:5';
+    await post(handler, JSON.stringify({ message: 'x', stack: inline, path: '/patients/9f2c1a/notes?draft=1' }));
+    await routeClient.flush();
+    const raw = JSON.stringify(errors());
+    expect(raw).not.toContain('9f2c1a');
+    expect(raw).not.toContain('draft');
+    await routeClient.close();
+  });
 });
 
 describe('moveClientSourceMaps', () => {
@@ -242,7 +300,26 @@ describe('moveClientSourceMaps', () => {
     expect(readdirSync(join(build, 'client/_app/immutable/chunks'))).toEqual(['a.js']);
     expect(readdirSync(join(build, 'client-maps/_app/immutable/chunks'))).toEqual(['a.js.map']);
     expect(readdirSync(join(build, 'client-maps'))).toContain('app.css.map');
-    expect(moveClientSourceMaps(join(build, 'missing'))).toBe(0);
+    expect(moveClientSourceMaps(join(build, 'missing'))).toBe(-1);
     rmSync(build, { recursive: true, force: true });
   });
 });
+
+describe('moveClientSourceMaps with SvelteKit output paths', () => {
+  it('rewrites sources so they still resolve from the new location', () => {
+    const project = realpathSync(mkdtempSync(join(tmpdir(), 'radar-maps-depth-')));
+    const original = join(project, '.svelte-kit/output/client/_app/immutable/chunks');
+    const served = join(project, 'build/client/_app/immutable/chunks');
+    mkdirSync(original, { recursive: true });
+    mkdirSync(served, { recursive: true });
+    mkdirSync(join(project, 'src/lib'), { recursive: true });
+    const map = { version: 3, sources: ['../../../../../../src/lib/Toolbar.svelte'], sourcesContent: ['<script></script>'], mappings: 'AAAA', names: [] };
+    writeFileSync(join(original, 'a.js.map'), JSON.stringify(map));
+    writeFileSync(join(served, 'a.js.map'), JSON.stringify(map));
+    expect(moveClientSourceMaps(join(project, 'build'))).toBe(1);
+    const moved = JSON.parse(readFileSync(join(project, 'build/client-maps/_app/immutable/chunks/a.js.map'), 'utf8')) as { sources: string[] };
+    expect(resolve(join(project, 'build/client-maps/_app/immutable/chunks'), moved.sources[0]!)).toBe(join(project, 'src/lib/Toolbar.svelte'));
+    rmSync(project, { recursive: true, force: true });
+  });
+});
+

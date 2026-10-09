@@ -69,9 +69,11 @@ export const handle = sequence(radarHandle(), yourHandle);
 export const handleError = radarHandleError();
 ```
 
-Erros do navegador vão por uma rota do próprio app, sem expor a chave:
+Se o app já gera o próprio id de requisição, passe-o e coloque o `radarHandle` depois do handle que o cria: `radarHandle({ requestId: (event) => event.locals.requestId })`.
 
-```ts
+Erros do navegador vão por uma rota do próprio app, sem expor a chave. Ela limita tamanho e frequência por visitante e no total; atrás de proxy, configure `ADDRESS_HEADER`/`XFF_DEPTH` do adapter-node para o IP do visitante ser o real:
+
+```ts title="src/routes/api/radar/client-errors/+server.ts"
 import { radarClientErrors } from '@oconde/radar/sveltekit';
 
 export const POST = radarClientErrors();

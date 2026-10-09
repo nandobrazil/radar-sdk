@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { Handle, HandleServerError, RequestEvent, RequestHandler } from '@sveltejs/kit';
@@ -13,11 +14,13 @@ import { parseBrowserStack } from '../stack.js';
 export { moveClientSourceMaps } from './sourcemaps.js';
 
 export type RadarHandleOptions = { client?: RadarClient; requestId?: (event: RequestEvent) => string | null | undefined };
+export type RadarHandleErrorOptions = { client?: RadarClient };
 
 export type ClientErrorsOptions = {
   clientDir?: string;
   sourceMapsDir?: string;
   maxPerMinute?: number;
+  maxGlobalPerMinute?: number;
   maxBytes?: number;
   client?: RadarClient;
 };
@@ -63,9 +66,13 @@ function withRequestId(response: Response, requestId: string): Response {
     response.headers.set('x-request-id', requestId);
     return response;
   } catch {
-    const copy = new Response(response.body, response);
-    copy.headers.set('x-request-id', requestId);
-    return copy;
+    try {
+      const copy = new Response(response.body, response);
+      copy.headers.set('x-request-id', requestId);
+      return copy;
+    } catch {
+      return response;
+    }
   }
 }
 
@@ -94,15 +101,18 @@ export function radarHandle(options: RadarHandleOptions = {}): Handle {
   };
 }
 
-export function radarHandleError(inner?: HandleServerError, options: RadarHandleOptions = {}): HandleServerError {
+export function radarHandleError(inner?: HandleServerError, options: RadarHandleErrorOptions = {}): HandleServerError {
   const client = options.client ?? radar;
   return (input) => {
+    const unexpected = (input.status ?? 500) >= 500;
     try {
-      if ((input.status ?? 500) >= 500) client.captureError(input.error);
+      if (unexpected) client.captureError(input.error);
     } catch {
-      return inner ? inner(input) : { message: 'Internal Error' };
+      return inner?.(input);
     }
-    return inner ? inner(input) : { message: 'Internal Error' };
+    if (inner) return inner(input);
+    if (unexpected) console.error(input.error);
+    return undefined;
   };
 }
 
@@ -176,15 +186,35 @@ function maskText(text: string): string {
   return text.replace(CREDENTIAL_IN_TEXT, (match) => maskValue(match));
 }
 
-function localFrame(frame: StackFrame, clientDir: string): StackFrame {
+function remoteFrame(frame: StackFrame, file: string): StackFrame {
+  return { ...frame, file, inApp: false };
+}
+
+function localFrame(frame: StackFrame, clientDir: string, mapFor: (file: string) => string | null, routeOnly: boolean): StackFrame {
+  let url: URL;
   try {
-    const url = new URL(frame.file);
-    if (!url.pathname.startsWith('/_app/')) return { ...frame, file: `${url.origin}${url.pathname}` };
-    const candidate = resolve(clientDir, `.${decodeURIComponent(url.pathname)}`);
-    return candidate.startsWith(clientDir + sep) ? { ...frame, file: candidate, inApp: true } : frame;
+    url = new URL(frame.file);
   } catch {
-    return frame;
+    return remoteFrame(frame, 'browser');
   }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return remoteFrame(frame, 'browser');
+  const page = routeOnly ? url.origin : `${url.origin}${url.pathname}`;
+  if (!url.pathname.startsWith('/_app/')) return remoteFrame(frame, page);
+  let candidate: string;
+  try {
+    candidate = resolve(clientDir, `.${decodeURIComponent(url.pathname)}`);
+  } catch {
+    return remoteFrame(frame, page);
+  }
+  const map = candidate.startsWith(clientDir + sep) ? mapFor(candidate) : null;
+  if (!map || !existsSync(map) || !existsSync(candidate)) return remoteFrame(frame, `${url.origin}${url.pathname}`);
+  return { ...frame, fn: undefined, file: candidate, inApp: true };
+}
+
+function visitorKey(address: string | undefined): string {
+  if (!address) return 'unknown';
+  if (!address.includes(':')) return address;
+  return address.toLowerCase().split(':').slice(0, 4).join(':');
 }
 
 export function radarClientErrors(options: ClientErrorsOptions = {}): RequestHandler {
@@ -193,26 +223,28 @@ export function radarClientErrors(options: ClientErrorsOptions = {}): RequestHan
   const mapsDir = resolve(options.sourceMapsDir ?? 'build/client-maps');
   const maxBytes = options.maxBytes ?? 16_384;
   const limiter = new WindowLimiter(options.maxPerMinute ?? 10, 60_000);
+  const globalLimiter = new WindowLimiter(options.maxGlobalPerMinute ?? 60, 60_000);
   const mapLocator = (file: string) => (file.startsWith(clientDir + sep) ? `${resolve(mapsDir, file.slice(clientDir.length + 1))}.map` : null);
   return async (event) => {
     try {
-      if (!limiter.allow(clientAddress(event) ?? 'unknown')) return new Response(null, { status: 429 });
+      if (!limiter.allow(visitorKey(clientAddress(event))) || !globalLimiter.allow('route')) return new Response(null, { status: 429 });
       if (Number(event.request.headers.get('content-length') ?? 0) > maxBytes) return new Response(null, { status: 413 });
       const text = await readLimited(event.request, maxBytes);
       if (text === null) return new Response(null, { status: 413 });
       const report = parseReport(text);
       if (!report) return new Response(null, { status: 400 });
       const mode = client.settings.redact;
+      const routeOnly = client.settings.requestDetail === 'route';
       const exception: ExceptionInfo = {
         type: truncate(report.name, 200),
         message: mode === 'mask' ? maskText(report.message) : report.message,
-        frames: parseBrowserStack(report.stack).map((frame) => localFrame(frame, clientDir)),
+        frames: parseBrowserStack(report.stack).map((frame) => localFrame(frame, clientDir, mapLocator, routeOnly)),
       };
       const path = mode === 'mask' ? maskText(redactUrl(report.path, mode)) : report.path;
       client.captureException(exception, {
         handled: false,
         level: 'error',
-        request: { method: 'GET', url: path },
+        request: routeOnly ? null : { method: 'GET', url: path },
         attrs: { source: 'browser' },
         runtime: null,
         enrich: { mapLocator },

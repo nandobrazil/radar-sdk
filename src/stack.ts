@@ -5,13 +5,14 @@ import { truncate } from './serialize.js';
 const WITH_FUNCTION = /^at (?:async )?(.+?) \((.+)\)$/;
 const LOCATION = /^(.+):(\d+):(\d+)$/;
 const AT_SIGN_FRAME = /^(.*?)@(.+):(\d+):(\d+)$/;
+const MAX_FRAME_LINE = 1000;
 
 export function parseStack(stack: string | undefined): StackFrame[] {
   if (!stack) return [];
   const frames: StackFrame[] = [];
   for (const raw of stack.split('\n')) {
     const line = raw.trim();
-    if (!line.startsWith('at ')) continue;
+    if (line.length > MAX_FRAME_LINE || !line.startsWith('at ')) continue;
     const withFunction = WITH_FUNCTION.exec(line);
     const fn = withFunction?.[1];
     const location = withFunction ? (withFunction[2] ?? '') : line.replace(/^at (?:async )?/, '');
@@ -32,6 +33,7 @@ export function parseBrowserStack(stack: string | undefined): StackFrame[] {
   const frames: StackFrame[] = [];
   for (const raw of stack.split('\n')) {
     const line = raw.trim();
+    if (line.length > MAX_FRAME_LINE) continue;
     if (line.startsWith('at ')) {
       const withFunction = WITH_FUNCTION.exec(line);
       const fn = withFunction?.[1];

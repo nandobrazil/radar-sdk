@@ -3,6 +3,7 @@ export { RadarClient, type Attributes, type CaptureExceptionOptions, type CheckI
 export type { RadarOptions, RedactMode } from './options.js';
 export type { RadarMiddleware } from './express.js';
 export type { RequestLike, ResponseLike } from './context.js';
+export type { EnrichOptions, MapLocator } from './source.js';
 export type {
   CheckInPayload,
   CheckInStatus,

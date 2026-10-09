@@ -88,7 +88,6 @@ describe('handleErrorWithRadar', () => {
     expect(handle({ error: new Error('crash'), status: 500, message: 'Internal Error' })).toEqual({ message: 'oops: Internal Error' });
     expect(handle({ error: new Error('missing'), status: 404, message: 'Not Found' })).toEqual({ message: 'oops: Not Found' });
     expect(sentBodies().map((body) => body.message)).toEqual(['crash']);
-    expect(handleErrorWithRadar()({ error: new Error('x'), status: 500, message: 'Internal Error' })).toEqual({ message: 'Internal Error' });
   });
 });
 
@@ -112,3 +111,16 @@ describe('listenForClientErrors', () => {
     expect(sentBodies().map((body) => body.message)).toEqual(['click handler', 'fetch failed']);
   });
 });
+
+describe('handleErrorWithRadar without a handler', () => {
+  it('prints the error and lets SvelteKit keep its own message', async () => {
+    const { handleErrorWithRadar } = await load();
+    const printed = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const handle = handleErrorWithRadar();
+    expect(handle({ error: new Error('boom'), status: 500, message: 'Internal Error' } as never)).toBeUndefined();
+    expect(handle({ error: new Error('nope'), status: 404, message: 'Not Found' } as never)).toBeUndefined();
+    expect(printed).toHaveBeenCalledTimes(1);
+    printed.mockRestore();
+  });
+});
+

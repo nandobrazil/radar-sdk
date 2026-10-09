@@ -155,7 +155,7 @@ async function loadMap(path: string, lines: string[], locator?: MapLocator): Pro
   }
   let raw: string | null;
   let mapDir: string;
-  const located = url ? null : (locator?.(path) ?? `${path}.map`);
+  const located = url ? null : locator ? locator(path) : `${path}.map`;
   if (located) {
     raw = await readText(located);
     mapDir = dirname(located);

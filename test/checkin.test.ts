@@ -12,7 +12,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function setup(respond?: Responder, options: { debug?: boolean } = {}) {
+async function setup(respond?: Responder, options: { debug?: boolean; environment?: string; release?: string } = {}) {
   const server = await startFakeIngest(respond);
   servers.push(server);
   const client = new RadarClient();
@@ -30,6 +30,15 @@ describe('radar.checkIn', () => {
       ['POST', '/api/v1/checkins/walg-archive-check', 'Bearer rk_test', { status: 'in_progress', checkInId: 'run-1', environment: 'production', release: 'abc123' }],
       ['POST', '/api/v1/checkins/walg-archive-check', 'Bearer rk_test', { status: 'ok', checkInId: 'run-1', durationMs: 1234, environment: 'production', release: 'abc123' }],
     ]);
+  });
+
+  it('keeps environment, release and duration inside the limits the server accepts', async () => {
+    const { client, checkIns } = await setup(undefined, { environment: 'e'.repeat(80), release: 'r'.repeat(200) });
+    await client.checkIn('backup', 'ok', { durationMs: 30 * 86_400_000 });
+    const body = checkIns()[0]!.body as { environment: string; release: string; durationMs: number };
+    expect(body.environment).toHaveLength(64);
+    expect(body.release).toHaveLength(128);
+    expect(body.durationMs).toBe(7 * 86_400_000);
   });
 
   it('never throws and skips invalid slugs, statuses and disabled clients', async () => {

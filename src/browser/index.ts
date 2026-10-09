@@ -71,10 +71,13 @@ export function reportClientError(error: unknown, options: ReportOptions = {}): 
   }
 }
 
-export function handleErrorWithRadar<Input extends ErrorHandlerInput, Output>(handler?: (input: Input) => Output, options: ReportOptions = {}): (input: Input) => Output | { message: string } {
+export function handleErrorWithRadar<Input extends ErrorHandlerInput, Output>(handler?: (input: Input) => Output, options: ReportOptions = {}): (input: Input) => Output | undefined {
   return (input) => {
-    if ((input.status ?? 500) >= 500) reportClientError(input.error, options);
-    return handler ? handler(input) : { message: 'Internal Error' };
+    const unexpected = (input.status ?? 500) >= 500;
+    if (unexpected) reportClientError(input.error, options);
+    if (handler) return handler(input);
+    if (unexpected) console.error(input.error);
+    return undefined;
   };
 }
 

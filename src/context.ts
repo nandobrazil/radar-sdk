@@ -54,7 +54,9 @@ export function runWithContext<T>(context: RadarContext, fn: () => T): T {
   return globalState().storage.run(context, fn);
 }
 
+const SAFE_REQUEST_ID = /^[\x21-\x7e]+$/;
+
 export function requestIdFrom(incoming: string | undefined | null): string {
   const value = incoming?.trim();
-  return value && value.length <= LIMITS.requestIdLength ? value : randomUUID();
+  return value && value.length <= LIMITS.requestIdLength && SAFE_REQUEST_ID.test(value) ? value : randomUUID();
 }

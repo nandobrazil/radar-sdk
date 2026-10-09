@@ -101,3 +101,16 @@ describe('parseBrowserStack', () => {
     expect(parseBrowserStack('just a message')).toEqual([]);
   });
 });
+
+describe('parseStack with hostile input', () => {
+  it('skips very long lines quickly instead of backtracking on them', () => {
+    const hostile = `Error: x\n${'@'.repeat(16_000)}\n    at ok (/app/a.js:1:1)\n${' ('.repeat(8_000)}`;
+    const started = performance.now();
+    const frames = parseStack(hostile);
+    const browserFrames = parseBrowserStack(hostile);
+    expect(performance.now() - started).toBeLessThan(50);
+    expect(frames.map((frame) => frame.fn)).toEqual(['ok']);
+    expect(browserFrames.map((frame) => frame.fn)).toEqual(['ok']);
+  });
+});
+

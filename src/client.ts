@@ -40,11 +40,15 @@ type LogExtras = { request?: RequestInfo; mode?: RedactMode };
 export type CaptureExceptionOptions = {
   handled?: boolean;
   level?: 'error' | 'fatal';
-  request?: RequestInfo;
+  request?: RequestInfo | null;
   attrs?: Attributes;
   runtime?: RuntimeInfo | null;
   enrich?: EnrichOptions;
 };
+
+const MAX_CHECK_IN_DURATION_MS = 7 * 86_400_000;
+const MAX_CHECK_IN_ENVIRONMENT = 64;
+const MAX_CHECK_IN_RELEASE = 128;
 
 export class RadarClient {
   private options: ResolvedOptions = resolveOptions({}, {});
@@ -162,13 +166,15 @@ export class RadarClient {
       }
       if (!CHECKIN_STATUSES.includes(status)) return;
       const checkInId = typeof options.checkInId === 'string' && options.checkInId ? options.checkInId.slice(0, LIMITS.checkInIdLength) : undefined;
-      const durationMs = typeof options.durationMs === 'number' && Number.isFinite(options.durationMs) && options.durationMs >= 0 ? Math.round(options.durationMs) : undefined;
+      const durationMs = typeof options.durationMs === 'number' && Number.isFinite(options.durationMs) && options.durationMs >= 0 ? Math.min(Math.round(options.durationMs), MAX_CHECK_IN_DURATION_MS) : undefined;
+      const environment = this.options.environment.slice(0, MAX_CHECK_IN_ENVIRONMENT) || 'production';
+      const release = this.options.release?.slice(0, MAX_CHECK_IN_RELEASE);
       const payload: CheckInPayload = {
         status,
         ...(checkInId ? { checkInId } : {}),
         ...(durationMs !== undefined ? { durationMs } : {}),
-        environment: this.options.environment,
-        ...(this.options.release ? { release: this.options.release } : {}),
+        environment,
+        ...(release ? { release } : {}),
       };
       await this.transport.checkIn(slug, payload);
     } catch (error) {
@@ -271,7 +277,7 @@ export class RadarClient {
     if (this.closed) return;
     const context = currentContext();
     const mode = this.options.redact;
-    const request = options.request ?? (context?.req ? requestInfo(context.req, mode, { route: context.route }, this.options.requestDetail) : undefined);
+    const request = options.request === null ? undefined : (options.request ?? (context?.req ? requestInfo(context.req, mode, { route: context.route }, this.options.requestDetail) : undefined));
     const runtime = options.runtime === undefined ? runtimeInfo() : options.runtime;
     const event: ErrorEvent = {
       type: 'error',
