@@ -224,6 +224,28 @@ describe('radarClientErrors', () => {
     expect(external!.fn).toBeUndefined();
   });
 
+  it('records what the person did right before the error, masked, and ignores an invalid action', async () => {
+    const handler = radarClientErrors({ clientDir, sourceMapsDir: mapsDir, client });
+    const action = { kind: 'click', element: 'button', label: 'Pagar com Bearer abcdefghijklmnopqrstuvwxyz', msBefore: 420 };
+    await post(handler, JSON.stringify({ name: 'Error', message: 'one', stack, path: '/cart', action }));
+    await post(handler, JSON.stringify({ name: 'Error', message: 'two', stack, path: '/cart', action: { kind: 'hover', element: '<b>', label: 1, msBefore: -5 } }));
+    await client.flush();
+    const [first, second] = errors();
+    expect(first!.attrs).toMatchObject({ source: 'browser', 'ui.action': 'click', 'ui.element': 'button', 'ui.msBefore': 420 });
+    expect(String(first!.attrs!['ui.label'])).toMatch(/^Pagar com Bearer abcd…wxyz #[0-9a-f]{8}$/);
+    expect(second!.attrs).toEqual({ source: 'browser' });
+  });
+
+  it('keeps the action but not its label in route mode', async () => {
+    const routeClient = new RadarClient();
+    routeClient.init({ key: 'rk_test', endpoint: server.url, environment: 'test', captureUnhandled: false, requestDetail: 'route' });
+    const handler = radarClientErrors({ clientDir, sourceMapsDir: mapsDir, client: routeClient });
+    await post(handler, JSON.stringify({ name: 'Error', message: 'route', stack, path: '/cart', action: { kind: 'submit', element: 'form', label: 'Paciente Maria', msBefore: 30 } }));
+    await routeClient.close();
+    const [event] = errors();
+    expect(event!.attrs).toEqual({ source: 'browser', 'ui.action': 'submit', 'ui.element': 'form', 'ui.msBefore': 30 });
+  });
+
   it('refuses oversized, malformed and too frequent reports', async () => {
     const handler = radarClientErrors({ clientDir, sourceMapsDir: mapsDir, maxPerMinute: 3, maxBytes: 256, client });
     expect((await post(handler, JSON.stringify({ message: 'x'.repeat(400), path: '/' }), '192.0.2.1')).status).toBe(413);

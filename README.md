@@ -86,6 +86,8 @@ listenForClientErrors();
 export const handleError = handleErrorWithRadar();
 ```
 
+O erro do navegador chega com o que a pessoa fez logo antes (por exemplo, "clicou no botão Aplicar cupom"): o último clique ou envio de formulário até 10 s antes, com o texto visível do elemento e nunca o que foi digitado. `listenForClientErrors({ captureActions: false })` desliga.
+
 Com `build: { sourcemap: 'hidden' }` no Vite e `radar-sourcemaps` depois do build, os mapas saem de `build/client`, os do servidor passam a apontar direto para `src/`, e os erros mostram o código original. Detalhes em [SvelteKit](https://radar.oconde.dev/docs/sdk/sveltekit/) e [Erros do navegador](https://radar.oconde.dev/docs/sdk/browser/).
 
 ## Tarefas agendadas

@@ -6,6 +6,8 @@
 
 - `@oconde/radar/sveltekit`: `radarHandle` (contexto, `x-request-id`, log `http.request`; opção `requestId` para usar o id do app), `radarHandleError`, `radarClientErrors` (rota que recebe erros do navegador), `moveClientSourceMaps` e `composeServerSourceMaps`.
 - `@oconde/radar/browser`: `reportClientError`, `handleErrorWithRadar` e `listenForClientErrors`, sem dependência de Node.
+- Erros do navegador trazem o que a pessoa fez logo antes: `listenForClientErrors` guarda o último clique ou envio de formulário (elemento e texto visível, nunca o valor digitado) e a rota grava em `ui.action`, `ui.element`, `ui.label` e `ui.msBefore`. No modo `requestDetail: 'route'` o texto do elemento não é enviado. `captureActions: false` desliga.
+- Frames do navegador ganham o nome da função do código original (inferido do source map), em vez de ficarem sem nome.
 - Comando `radar-sourcemaps [buildDir]`: depois do `vite build`, tira os source maps de `build/client` e reescreve os caminhos para continuarem apontando para o código. Também junta os dois níveis de mapa do servidor (o do Vite e o do `adapter-node`), para a stack do servidor apontar direto para o arquivo em `src/`, e não para `.svelte-kit/output/server`.
 - `radar.withContext`, `radar.checkIn` e `radar.cron` para workers e tarefas agendadas.
 - `radar.captureException` para quem já tem a exceção montada.

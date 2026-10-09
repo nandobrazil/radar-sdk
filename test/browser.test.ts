@@ -124,3 +124,66 @@ describe('handleErrorWithRadar without a handler', () => {
   });
 });
 
+
+type FakeElement = { tagName: string; attributes: Record<string, string>; textContent?: string; closest(selector: string): FakeElement | null; getAttribute(name: string): string | null };
+
+function element(tagName: string, attributes: Record<string, string> = {}, textContent = '', interactive = true): FakeElement {
+  const node: FakeElement = {
+    tagName: tagName.toUpperCase(),
+    attributes,
+    textContent,
+    closest: () => (interactive ? node : null),
+    getAttribute: (name) => attributes[name] ?? null,
+  };
+  return node;
+}
+
+function fire(type: string, event: unknown): void {
+  for (const listener of listeners.get(type) ?? []) listener(event);
+}
+
+describe('listenForClientErrors with the last action', () => {
+  it('attaches the click that came right before the error', async () => {
+    const { listenForClientErrors } = await load();
+    listenForClientErrors();
+    fire('click', { target: element('button', {}, '  Aplicar\n   cupom  ') });
+    fire('error', { error: new Error('price of undefined') });
+    const [body] = sentBodies();
+    expect(body!.action).toMatchObject({ kind: 'click', element: 'button', label: 'Aplicar cupom' });
+    expect((body!.action as { msBefore: number }).msBefore).toBeGreaterThanOrEqual(0);
+  });
+
+  it('describes links, form submissions and fields without reading what was typed', async () => {
+    const { listenForClientErrors } = await load();
+    listenForClientErrors();
+    fire('click', { target: element('a', { 'aria-label': 'Abrir pedido A1002' }, 'ícone') });
+    fire('error', { error: new Error('one') });
+    fire('submit', { target: element('form', { name: 'checkout' }) });
+    fire('error', { error: new Error('two') });
+    fire('click', { target: element('input', { type: 'password', name: 'senha', value: 'segredo123' }) });
+    fire('error', { error: new Error('three') });
+    const actions = sentBodies().map((body) => body.action as Record<string, unknown>);
+    expect(actions[0]).toMatchObject({ kind: 'click', element: 'link', label: 'Abrir pedido A1002' });
+    expect(actions[1]).toMatchObject({ kind: 'submit', element: 'form', label: 'checkout' });
+    expect(actions[2]).toMatchObject({ kind: 'click', element: 'input', label: 'senha' });
+    expect(JSON.stringify(sentBodies())).not.toContain('segredo123');
+  });
+
+  it('leaves out actions older than ten seconds and can be turned off', async () => {
+    vi.useFakeTimers();
+    try {
+      const { listenForClientErrors } = await load();
+      const stop = listenForClientErrors();
+      fire('click', { target: element('button', {}, 'Salvar') });
+      vi.advanceTimersByTime(10_001);
+      fire('error', { error: new Error('late') });
+      stop();
+      listeners.clear();
+      listenForClientErrors({ captureActions: false });
+      expect(listeners.has('click')).toBe(false);
+      expect(sentBodies()[0]!.action).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

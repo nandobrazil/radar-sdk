@@ -4,6 +4,7 @@ import { performance } from 'node:perf_hooks';
 import type { Handle, HandleServerError, RequestEvent, RequestHandler } from '@sveltejs/kit';
 import type { RadarClient } from '../client.js';
 import { requestIdFrom, runWithContext, type RadarContext, type RequestLike } from '../context.js';
+import type { RedactMode } from '../options.js';
 import { LIMITS, type ExceptionInfo, type StackFrame } from '../protocol/index.js';
 import { radar } from '../radar.js';
 import { maskValue } from '../redact.js';
@@ -25,7 +26,13 @@ export type ClientErrorsOptions = {
   client?: RadarClient;
 };
 
-type ClientErrorReport = { name: string; message: string; stack?: string; path: string };
+type ReportedAction = { kind: 'click' | 'submit'; element: string; label: string; msBefore: number };
+type ClientErrorReport = { name: string; message: string; stack?: string; path: string; action?: ReportedAction };
+
+const ACTION_KINDS = new Set(['click', 'submit']);
+const ACTION_ELEMENT = /^[a-z][a-z0-9-]{0,23}$/;
+const MAX_ACTION_LABEL = 80;
+const MAX_ACTION_DELAY_MS = 60_000;
 
 const CREDENTIAL_IN_TEXT = /\b(?:Bearer|Basic|Token)\s+[A-Za-z0-9._~+/=-]{8,}|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*/g;
 const MAX_STACK_LENGTH = 16_000;
@@ -164,6 +171,25 @@ function optionalText(value: unknown, max: number): string | undefined | null {
   return typeof value === 'string' ? value.slice(0, max) : null;
 }
 
+function parseAction(value: unknown): ReportedAction | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const { kind, element, label, msBefore } = record;
+  if (typeof kind !== 'string' || !ACTION_KINDS.has(kind)) return undefined;
+  if (typeof element !== 'string' || !ACTION_ELEMENT.test(element)) return undefined;
+  if (typeof label !== 'string') return undefined;
+  if (typeof msBefore !== 'number' || !Number.isInteger(msBefore) || msBefore < 0 || msBefore > MAX_ACTION_DELAY_MS) return undefined;
+  return { kind: kind as ReportedAction['kind'], element, label: label.replace(/\s+/g, ' ').trim().slice(0, MAX_ACTION_LABEL), msBefore };
+}
+
+function actionAttrs(action: ReportedAction | undefined, mode: RedactMode, routeOnly: boolean): Record<string, string | number> {
+  if (!action) return {};
+  const attrs: Record<string, string | number> = { 'ui.action': action.kind, 'ui.element': action.element };
+  if (!routeOnly && action.label) attrs['ui.label'] = mode === 'mask' ? maskText(action.label) : action.label;
+  attrs['ui.msBefore'] = action.msBefore;
+  return attrs;
+}
+
 function parseReport(text: string): ClientErrorReport | null {
   let payload: unknown;
   try {
@@ -179,7 +205,8 @@ function parseReport(text: string): ClientErrorReport | null {
   const path = optionalText(record.path, 2000);
   if (name === null || message === null || stack === null || path === null) return null;
   if (!message && !stack) return null;
-  return { name: name || 'Error', message: message ?? '', ...(stack ? { stack } : {}), path: path?.startsWith('/') ? path : '/' };
+  const action = parseAction(record.action);
+  return { name: name || 'Error', message: message ?? '', ...(stack ? { stack } : {}), path: path?.startsWith('/') ? path : '/', ...(action ? { action } : {}) };
 }
 
 function maskText(text: string): string {
@@ -245,7 +272,7 @@ export function radarClientErrors(options: ClientErrorsOptions = {}): RequestHan
         handled: false,
         level: 'error',
         request: routeOnly ? null : { method: 'GET', url: path },
-        attrs: { source: 'browser' },
+        attrs: { source: 'browser', ...actionAttrs(report.action, mode, routeOnly) },
         runtime: null,
         enrich: { mapLocator, inferFunctionNames: true },
       });
