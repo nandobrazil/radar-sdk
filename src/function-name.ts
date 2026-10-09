@@ -10,9 +10,10 @@ const NAME_PATTERNS = [
   new RegExp(`\\bfunction\\s*\\*?\\s*(${IDENTIFIER})\\s*\\(`),
   new RegExp(`(${IDENTIFIER})\\s*[:=]\\s*(?:async\\s+)?function\\b`),
   new RegExp(`(${IDENTIFIER})\\s*(?::\\s*[^=]+)?=\\s*(?:async\\s+)?(?:\\([^]*\\)|${IDENTIFIER})\\s*(?::\\s*[^=]+)?=>\\s*$`),
-  new RegExp(`(${IDENTIFIER})\\s*:\\s*(?:async\\s+)?(?:\\([^]*\\)|${IDENTIFIER})\\s*(?::\\s*[^=]+)?=>\\s*$`),
-  new RegExp(`^\\s*(?:(?:export|default|public|private|protected|static|async|override|readonly|get|set)\\s+)*\\*?\\s*(${IDENTIFIER})\\s*(?:<[^>]*>)?\\s*\\([^]*\\)\\s*(?::\\s*[^{]+)?$`),
+  new RegExp(`(?:^|[{,(]\\s*)(${IDENTIFIER})\\s*:\\s*(?:async\\s+)?(?:\\([^]*\\)|${IDENTIFIER})\\s*(?::\\s*[^=]+)?=>\\s*$`),
 ];
+const METHOD_PATTERN = new RegExp(`^\\s*(?:(?:export|default|public|private|protected|static|async|override|readonly|get|set)\\s+)*\\*?\\s*(${IDENTIFIER})\\s*(?:<[^>]*>)?\\s*\\([^]*\\)\\s*(?::\\s*[^{]+)?$`);
+const ANONYMOUS_FUNCTION = /\bfunction\b|=>/;
 
 function codeOnly(text: string): string {
   return text
@@ -40,7 +41,8 @@ function headerOf(lines: string[], index: number, prefix: string): string {
 }
 
 function nameIn(header: string): string | undefined {
-  for (const pattern of NAME_PATTERNS) {
+  const patterns = ANONYMOUS_FUNCTION.test(header) ? NAME_PATTERNS : [...NAME_PATTERNS, METHOD_PATTERN];
+  for (const pattern of patterns) {
     const name = pattern.exec(header)?.[1];
     if (name && !KEYWORDS.has(name)) return name.slice(0, MAX_NAME_LENGTH);
   }

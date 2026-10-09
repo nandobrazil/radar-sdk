@@ -236,6 +236,17 @@ describe('radarClientErrors', () => {
     expect(second!.attrs).toEqual({ source: 'browser' });
   });
 
+  it('scrubs emails and numbers from an action label and caps it at 60 characters', async () => {
+    const handler = radarClientErrors({ clientDir, sourceMapsDir: mapsDir, client });
+    const label = 'Falar com marina@cliente.exemplo pelo (11) 98765-4321 sobre o pedido 4521 agora mesmo por favor';
+    await post(handler, JSON.stringify({ name: 'Error', message: 'scrub', stack, path: '/cart', action: { kind: 'click', element: 'button', label, msBefore: 10 } }));
+    await client.flush();
+    const stored = String(errors()[0]!.attrs!['ui.label']);
+    expect(stored).not.toMatch(/marina|98765|4521/);
+    expect(stored.startsWith('Falar com <email> pelo <número> sobre o pedido <número>')).toBe(true);
+    expect(stored.length).toBeLessThanOrEqual(60);
+  });
+
   it('keeps the action but not its label in route mode', async () => {
     const routeClient = new RadarClient();
     routeClient.init({ key: 'rk_test', endpoint: server.url, environment: 'test', captureUnhandled: false, requestDetail: 'route' });

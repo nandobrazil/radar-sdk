@@ -22,6 +22,12 @@ describe('enclosingFunctionName', () => {
     expect(nameAt(source, 'item.price =')).toBe('applyCoupon');
   });
 
+  it('does not name an anonymous callback after the call that receives it', () => {
+    expect(nameAt(['setTimeout(function () {', '  explode();', '}, 10);'].join('\n'), 'explode()')).toBeUndefined();
+    expect(nameAt(['function boot() {', '  setTimeout(function () {', '    explode();', '  }, 10);', '}'].join('\n'), 'explode()')).toBe('boot');
+    expect(nameAt(['const pick = flag ? fallback : (value) => {', '  return value.id;', '};'].join('\n'), 'return')).toBeUndefined();
+  });
+
   it('ignores braces inside strings and comments and handles one-line functions', () => {
     expect(nameAt(['function render(name: string) {', "  const open = '{';", '  // closing } here', '  return open + name.trim();', '}'].join('\n'), 'return')).toBe('render');
     expect(nameAt('function fail() { throw new Error("x") }', 'throw')).toBe('fail');

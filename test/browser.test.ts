@@ -179,6 +179,19 @@ describe('listenForClientErrors with the last action', () => {
     expect(JSON.stringify(sentBodies())).not.toContain('Marina');
   });
 
+  it('describes a whole-row link without the personal data in it', async () => {
+    const { listenForClientErrors } = await load();
+    listenForClientErrors();
+    fire('click', { target: element('a', { href: '/clientes/42' }, 'Marina Souza CPF 123.456.789-09 (11) 98765-4321 marina@cliente.exemplo') });
+    fire('error', { error: new Error('row') });
+    fire('click', { target: element('a', { href: '/pedidos' }, 'Ver pedidos') });
+    fire('error', { error: new Error('menu') });
+    const [row, menu] = sentBodies().map((body) => body.action as Record<string, unknown>);
+    expect(row).toMatchObject({ kind: 'click', element: 'link', label: '' });
+    expect(menu).toMatchObject({ kind: 'click', element: 'link', label: 'Ver pedidos' });
+    expect(JSON.stringify(sentBodies())).not.toContain('Marina');
+  });
+
   it('leaves out actions older than ten seconds and can be turned off', async () => {
     vi.useFakeTimers();
     try {

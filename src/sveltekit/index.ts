@@ -31,7 +31,10 @@ type ClientErrorReport = { name: string; message: string; stack?: string; path: 
 
 const ACTION_KINDS = new Set(['click', 'submit']);
 const ACTION_ELEMENT = /^[a-z][a-z0-9-]{0,23}$/;
-const MAX_ACTION_LABEL = 80;
+const MAX_ACTION_LABEL = 60;
+const MAX_RAW_ACTION_LABEL = 200;
+const EMAIL_IN_LABEL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+const NUMBER_IN_LABEL = /(?<![\w#])\(?\+?\d(?:[\d\s().\-/]*\d){2,}/g;
 const MAX_ACTION_DELAY_MS = 60_000;
 
 const CREDENTIAL_IN_TEXT = /\b(?:Bearer|Basic|Token)\s+[A-Za-z0-9._~+/=-]{8,}|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*/g;
@@ -179,13 +182,17 @@ function parseAction(value: unknown): ReportedAction | undefined {
   if (typeof element !== 'string' || !ACTION_ELEMENT.test(element)) return undefined;
   if (typeof label !== 'string') return undefined;
   if (typeof msBefore !== 'number' || !Number.isInteger(msBefore) || msBefore < 0 || msBefore > MAX_ACTION_DELAY_MS) return undefined;
-  return { kind: kind as ReportedAction['kind'], element, label: label.replace(/\s+/g, ' ').trim().slice(0, MAX_ACTION_LABEL), msBefore };
+  return { kind: kind as ReportedAction['kind'], element, label: label.replace(/\s+/g, ' ').trim().slice(0, MAX_RAW_ACTION_LABEL), msBefore };
+}
+
+function scrubLabel(label: string): string {
+  return maskText(label).replace(EMAIL_IN_LABEL, '<email>').replace(NUMBER_IN_LABEL, '<número>');
 }
 
 function actionAttrs(action: ReportedAction | undefined, mode: RedactMode, routeOnly: boolean): Record<string, string | number> {
   if (!action) return {};
   const attrs: Record<string, string | number> = { 'ui.action': action.kind, 'ui.element': action.element };
-  if (!routeOnly && action.label) attrs['ui.label'] = mode === 'mask' ? maskText(action.label) : action.label;
+  if (!routeOnly && action.label) attrs['ui.label'] = (mode === 'mask' ? scrubLabel(action.label) : action.label).slice(0, MAX_ACTION_LABEL);
   attrs['ui.msBefore'] = action.msBefore;
   return attrs;
 }
