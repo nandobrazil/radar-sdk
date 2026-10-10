@@ -29,6 +29,13 @@ export function requestPath(req: RequestLike): string {
   return end >= 0 ? url.slice(0, end) : url;
 }
 
+export function matchesRequest(pattern: string | RegExp, path: string, route: string | undefined): boolean {
+  const candidates = route === undefined ? [path] : [path, route];
+  if (pattern instanceof RegExp) return candidates.some((value) => value.search(pattern) !== -1);
+  const prefix = pattern.endsWith('/') ? pattern : `${pattern}/`;
+  return candidates.some((value) => value === pattern || value.startsWith(prefix));
+}
+
 export function requestRoute(req: RequestLike, route?: string): string | undefined {
   if (route) return route;
   if (typeof req.route?.path !== 'string') return undefined;

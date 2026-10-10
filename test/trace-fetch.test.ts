@@ -43,6 +43,31 @@ afterEach(async () => {
 
 const clientLogs = () => ingest.events().filter((event): event is LogEvent => event.type === 'log' && event.message === 'http.client');
 
+describe('traceFetch filters', () => {
+  it('leaves the ignored hosts and URLs out of the logs while the calls still go out', async () => {
+    await client.close();
+    client = new RadarClient();
+    client.init({ key: 'rk_test', endpoint: ingest.url, environment: 'test', captureUnhandled: false, traceFetch: { ignore: [other.host, /\/polling$/] } });
+    await fetch(`${other.url}/a`);
+    await fetch(`${api.url}/v1/polling`);
+    await fetch(`${api.url}/v1/orders`);
+    await client.flush();
+    expect(clientLogs().map((event) => event.attrs?.path)).toEqual(['/v1/orders']);
+    expect(other.received.map((request) => request.path)).toEqual(['/a']);
+    expect(api.received.map((request) => request.path)).toEqual(['/v1/polling', '/v1/orders']);
+  });
+
+  it('sends the request id on every call when propagateTo has a RegExp with the g flag', async () => {
+    await client.close();
+    client = new RadarClient();
+    client.init({ key: 'rk_test', endpoint: ingest.url, environment: 'test', captureUnhandled: false, traceFetch: { propagateTo: [/127\.0\.0\.1/g] } });
+    await runWithContext({ requestId: 'req-g', startedAt: 0 }, async () => {
+      for (const path of ['/1', '/2', '/3']) await fetch(`${api.url}${path}`);
+    });
+    expect(api.received.map((request) => request.headers['x-request-id'] ?? null)).toEqual(['req-g', 'req-g', 'req-g']);
+  });
+});
+
 describe('traceFetch', () => {
   it('logs each outgoing call with method, host, path without the query, status and duration, but not the calls to Radar', async () => {
     await fetch(`${api.url}/users/42/orders?token=abc#top`, { method: 'post', body: '{}' });

@@ -3,8 +3,11 @@ import type { LogLevel } from './protocol/index.js';
 export type RedactMode = 'mask' | 'none';
 export type RequestDetail = 'full' | 'route';
 export type FetchTraceTarget = string | RegExp;
-export type TraceFetchOption = boolean | { propagateTo?: FetchTraceTarget[] };
-export type ResolvedTraceFetch = { enabled: boolean; propagateTo: FetchTraceTarget[] };
+export type TraceFetchOption = boolean | { propagateTo?: FetchTraceTarget[]; ignore?: FetchTraceTarget[] };
+export type ResolvedTraceFetch = { enabled: boolean; propagateTo: FetchTraceTarget[]; ignore: FetchTraceTarget[] };
+export type RequestPattern = string | RegExp;
+export type LogRequestsOption = boolean | { include?: RequestPattern[]; exclude?: RequestPattern[]; sample?: number };
+export type ResolvedLogRequests = { enabled: boolean; include: RequestPattern[]; exclude: RequestPattern[]; sample: number };
 
 export type RadarOptions = {
   key?: string;
@@ -16,7 +19,7 @@ export type RadarOptions = {
   minLevel?: LogLevel;
   redact?: RedactMode;
   requestDetail?: RequestDetail;
-  logRequests?: boolean;
+  logRequests?: LogRequestsOption;
   ignorePaths?: string[];
   captureUnhandled?: boolean;
   traceFetch?: TraceFetchOption;
@@ -33,7 +36,7 @@ export type ResolvedOptions = {
   minLevel: LogLevel;
   redact: RedactMode;
   requestDetail: RequestDetail;
-  logRequests: boolean;
+  logRequests: ResolvedLogRequests;
   ignorePaths: string[];
   captureUnhandled: boolean;
   traceFetch: ResolvedTraceFetch;
@@ -44,11 +47,26 @@ export const DEFAULT_ENDPOINT = 'https://radar-ingest.oconde.dev';
 
 const LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
 
+function patterns(value: unknown): (string | RegExp)[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): (string | RegExp)[] => {
+    if (item instanceof RegExp) return [item];
+    if (typeof item === 'string' && item.trim() !== '') return [item.trim()];
+    return [];
+  });
+}
+
 function resolveTraceFetch(value: TraceFetchOption | undefined): ResolvedTraceFetch {
-  if (!value) return { enabled: false, propagateTo: [] };
-  if (value === true) return { enabled: true, propagateTo: [] };
-  const targets = Array.isArray(value.propagateTo) ? value.propagateTo : [];
-  return { enabled: true, propagateTo: targets.filter((target) => (typeof target === 'string' ? target.trim() !== '' : target instanceof RegExp)) };
+  if (!value) return { enabled: false, propagateTo: [], ignore: [] };
+  if (value === true) return { enabled: true, propagateTo: [], ignore: [] };
+  return { enabled: true, propagateTo: patterns(value.propagateTo), ignore: patterns(value.ignore) };
+}
+
+function resolveLogRequests(value: LogRequestsOption | undefined): ResolvedLogRequests {
+  if (value === false) return { enabled: false, include: [], exclude: [], sample: 1 };
+  if (value === undefined || value === true || typeof value !== 'object' || value === null) return { enabled: true, include: [], exclude: [], sample: 1 };
+  const sample = typeof value.sample === 'number' && Number.isFinite(value.sample) && value.sample > 0 && value.sample <= 1 ? value.sample : 1;
+  return { enabled: true, include: patterns(value.include), exclude: patterns(value.exclude), sample };
 }
 
 export function resolveOptions(options: RadarOptions = {}, env: NodeJS.ProcessEnv = process.env): ResolvedOptions {
@@ -63,7 +81,7 @@ export function resolveOptions(options: RadarOptions = {}, env: NodeJS.ProcessEn
     minLevel: options.minLevel && LEVELS.includes(options.minLevel) ? options.minLevel : 'info',
     redact: options.redact === 'none' ? 'none' : 'mask',
     requestDetail: options.requestDetail === 'route' ? 'route' : 'full',
-    logRequests: options.logRequests ?? true,
+    logRequests: resolveLogRequests(options.logRequests),
     ignorePaths: options.ignorePaths ?? ['/healthz', '/health'],
     captureUnhandled: options.captureUnhandled ?? true,
     traceFetch: resolveTraceFetch(options.traceFetch),

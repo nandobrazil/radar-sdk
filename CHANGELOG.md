@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+### Novo
+
+- `logRequests` aceita filtros e amostragem: `{ include, exclude, sample }`. `include` e `exclude` recebem caminhos ou rotas (`'/dashboard'` vale para `/dashboard` e tudo abaixo dele) ou RegExp, testados no caminho e na rota do framework. `sample` (de 0 a 1) guarda só essa fração das requisições, sorteada de forma uniforme, e cada log guardado leva `sampleRate`, que o Radar usa para estimar os totais. `logRequests: true` e `false` continuam valendo.
+- `traceFetch.ignore`: hosts (o nome exato ou `.dominio`) ou RegExp testadas em `host + caminho` que não viram log `http.client`. As chamadas continuam saindo normalmente.
+
+### Correções
+
+- Uma RegExp com a flag `g` em `propagateTo` deixava de mandar o `x-request-id` em chamadas alternadas.
+
 ## 0.3.0
 
 ### Novo

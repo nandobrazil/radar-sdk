@@ -7,6 +7,7 @@ import { describeError, elapsedSince } from './util.js';
 export type FetchTraceConfig = {
   endpoint: string;
   propagateTo: FetchTraceTarget[];
+  ignore?: FetchTraceTarget[];
   redact: RedactMode;
   record: (level: LogLevel, attrs: Record<string, unknown>) => void;
 };
@@ -67,11 +68,20 @@ function originOf(value: string): string | null {
   }
 }
 
-function targets(url: URL, target: FetchTraceTarget): boolean {
-  if (target instanceof RegExp) return target.test(url.host);
-  const wanted = target.trim().toLowerCase();
+function hostMatches(url: URL, host: string): boolean {
+  const wanted = host.trim().toLowerCase();
   if (wanted.startsWith('.')) return url.hostname.toLowerCase().endsWith(wanted);
   return url.host.toLowerCase() === wanted || url.hostname.toLowerCase() === wanted;
+}
+
+function targets(url: URL, target: FetchTraceTarget): boolean {
+  if (target instanceof RegExp) return url.host.search(target) !== -1;
+  return hostMatches(url, target);
+}
+
+function ignored(url: URL, target: FetchTraceTarget): boolean {
+  if (target instanceof RegExp) return `${url.host}${url.pathname}`.search(target) !== -1;
+  return hostMatches(url, target);
 }
 
 function isPlainObject(value: unknown): boolean {
@@ -99,6 +109,7 @@ export function traceFetch(config: FetchTraceConfig): () => void {
     const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
     const context = currentContext();
     const [nextInput, nextInit] = context && config.propagateTo.some((target) => targets(url, target)) ? withRequestId(input, init, context.requestId) : [input, init];
+    if (config.ignore?.some((target) => ignored(url, target))) return original(nextInput, nextInit);
     const attrs = { method, host: url.host, path: outboundPath(url.pathname, config.redact) };
     const started = performance.now();
     try {

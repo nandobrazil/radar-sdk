@@ -22,7 +22,7 @@ import {
   type RuntimeInfo,
   type UserInfo,
 } from './protocol/index.js';
-import { pathParams, redactPath, requestInfo, requestPath, requestRoute } from './request.js';
+import { matchesRequest, pathParams, redactPath, requestInfo, requestPath, requestRoute } from './request.js';
 import { setFingerprintSecret } from './redact.js';
 import { prepareAttrs, truncate } from './serialize.js';
 import { enrichException, type EnrichOptions } from './source.js';
@@ -92,6 +92,7 @@ export class RadarClient {
         this.restoreFetch = traceFetch({
           endpoint: this.options.endpoint,
           propagateTo: this.options.traceFetch.propagateTo,
+          ignore: this.options.traceFetch.ignore,
           redact: this.options.redact,
           record: (level, attrs) => this.safely(() => this.emitLog(level, 'http.client', attrs)),
         });
@@ -216,22 +217,28 @@ export class RadarClient {
   }
 
   shouldLogRequest(req: RequestLike): boolean {
-    return this.options.logRequests && !this.options.ignorePaths.includes(requestPath(req));
+    return this.options.logRequests.enabled && !this.options.ignorePaths.includes(requestPath(req));
   }
 
   logHttpRequest(context: RadarContext, status: number): void {
     this.safely(() => {
       const req = context.req;
       if (!req) return;
-      const level: LogLevel = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
       const route = requestRoute(req, context.route);
+      const path = requestPath(req);
+      const { include, exclude, sample } = this.options.logRequests;
+      if (include.length > 0 && !include.some((pattern) => matchesRequest(pattern, path, route))) return;
+      if (exclude.some((pattern) => matchesRequest(pattern, path, route))) return;
+      if (sample < 1 && Math.random() >= sample) return;
+      const level: LogLevel = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
       runWithContext(context, () =>
         this.emitLog(level, 'http.request', {
           method: (req.method ?? 'GET').toUpperCase(),
           ...(route ? { route } : {}),
-          ...(this.options.requestDetail === 'full' ? { path: redactPath(requestPath(req), pathParams(req, requestPath(req)), this.options.redact) } : {}),
+          ...(this.options.requestDetail === 'full' ? { path: redactPath(path, pathParams(req, path), this.options.redact) } : {}),
           status,
           durationMs: elapsedSince(context.startedAt),
+          ...(sample < 1 ? { sampleRate: sample } : {}),
         }),
       );
     });

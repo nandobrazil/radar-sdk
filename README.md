@@ -104,7 +104,20 @@ await radar.cron('nightly-report', () => buildReport());
 radar.init({ key: process.env.RADAR_KEY, traceFetch: { propagateTo: ['api.spinlab.dev', '.oconde.dev'] } });
 ```
 
-Com `traceFetch`, cada `fetch` que o app faz vira um log `http.client` com método, host, caminho (sem a query, e com trechos que parecem token mascarados), status e duração, ou o erro quando a chamada nem chega a responder. Dentro de uma requisição, o log entra na linha do tempo dela. Para os hosts de `propagateTo` (o nome exato, `.dominio` para os subdomínios ou uma RegExp), o SDK manda o `x-request-id` da requisição atual, e o Radar mostra a mesma requisição nos dois projetos. `traceFetch: true` registra as chamadas sem mandar o id para ninguém. Chamadas para o próprio Radar ficam de fora.
+Com `traceFetch`, cada `fetch` que o app faz vira um log `http.client` com método, host, caminho (sem a query, e com trechos que parecem token mascarados), status e duração, ou o erro quando a chamada nem chega a responder. Dentro de uma requisição, o log entra na linha do tempo dela. Para os hosts de `propagateTo` (o nome exato, `.dominio` para os subdomínios ou uma RegExp), o SDK manda o `x-request-id` da requisição atual, e o Radar mostra a mesma requisição nos dois projetos. `traceFetch: true` registra as chamadas sem mandar o id para ninguém. Chamadas para o próprio Radar ficam de fora. Para não registrar chamadas barulhentas, como polling, use `ignore` com hosts ou RegExp testadas em `host + caminho`: `traceFetch: { ignore: ['api.telegram.org', /\/getUpdates$/] }`.
+
+## Quais requisições viram log
+
+Por padrão, cada requisição vira um log `http.request`, que alimenta o Desempenho e os limites do Radar. Para guardar só uma parte:
+
+```ts
+radar.init({
+  key: process.env.RADAR_KEY,
+  logRequests: { include: ['/dashboard', /^\/api\//], exclude: ['/dashboard/ping'], sample: 0.5 },
+});
+```
+
+`include` e `exclude` recebem caminhos ou rotas (`'/dashboard'` vale para `/dashboard` e tudo abaixo dele) ou RegExp. `sample` guarda só essa fração, sorteada de forma uniforme, e o Radar compensa a amostragem nos totais. `logRequests: false` desliga.
 
 ## Erros com o seu código
 
