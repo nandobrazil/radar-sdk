@@ -55,6 +55,12 @@ describe('logRequests filters', () => {
     expect(await logged()).toEqual([{ route: '/dashboard/stores/:storeId', path: '/dashboard/stores/42', sampleRate: undefined }]);
   });
 
+  it('logs no request with a sample of 0', async () => {
+    const app = start({ sample: 0 });
+    for (let index = 0; index < 20; index++) await request(app).get(`/item-${index}`);
+    expect(await logged()).toEqual([]);
+  });
+
   it('keeps a uniform sample and says the rate on each kept request', async () => {
     const app = start({ sample: 0.25 });
     const draws = [0.1, 0.9, 0.24, 0.25];

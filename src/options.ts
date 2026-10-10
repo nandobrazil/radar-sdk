@@ -65,7 +65,7 @@ function resolveTraceFetch(value: TraceFetchOption | undefined): ResolvedTraceFe
 function resolveLogRequests(value: LogRequestsOption | undefined): ResolvedLogRequests {
   if (value === false) return { enabled: false, include: [], exclude: [], sample: 1 };
   if (value === undefined || value === true || typeof value !== 'object' || value === null) return { enabled: true, include: [], exclude: [], sample: 1 };
-  const sample = typeof value.sample === 'number' && Number.isFinite(value.sample) && value.sample > 0 && value.sample <= 1 ? value.sample : 1;
+  const sample = typeof value.sample === 'number' && Number.isFinite(value.sample) && value.sample >= 0 && value.sample <= 1 ? value.sample : 1;
   return { enabled: true, include: patterns(value.include), exclude: patterns(value.exclude), sample };
 }
 

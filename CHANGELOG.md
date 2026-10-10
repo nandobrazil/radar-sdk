@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+### Correções
+
+- `logRequests: { sample: 0 }` não registra nenhuma requisição. Antes, 0 era tratado como valor inválido e virava 1, guardando todas.
+
 ## 0.4.0
 
 ### Novo

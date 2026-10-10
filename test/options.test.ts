@@ -62,7 +62,8 @@ describe('levelEnabled', () => {
       exclude: ['/dashboard/ping'],
       sample: 0.25,
     });
-    for (const sample of [0, -1, 1.5, Number.NaN, '0.5' as unknown as number]) expect(resolveOptions({ logRequests: { sample } }, {}).logRequests.sample).toBe(1);
+    for (const sample of [-1, 1.5, Number.NaN, '0.5' as unknown as number]) expect(resolveOptions({ logRequests: { sample } }, {}).logRequests.sample).toBe(1);
+    expect(resolveOptions({ logRequests: { sample: 0 } }, {}).logRequests.sample).toBe(0);
   });
 });
 
