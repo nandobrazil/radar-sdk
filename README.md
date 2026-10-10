@@ -98,6 +98,14 @@ await radar.cron('nightly-report', () => buildReport());
 
 `radar.cron` avisa o Radar no início, no fim e na falha, e o Radar alerta se a tarefa atrasar ou falhar. Em scripts sem o SDK, o check-in é um `POST` (veja o [PROTOCOL.md](PROTOCOL.md)). Para jobs e workers, `radar.withContext(fn)` dá a cada execução o próprio `requestId`. Detalhes em [Tarefas agendadas](https://radar.oconde.dev/docs/sdk/cron/).
 
+## Chamadas para outros serviços
+
+```ts
+radar.init({ key: process.env.RADAR_KEY, traceFetch: { propagateTo: ['api.spinlab.dev', '.oconde.dev'] } });
+```
+
+Com `traceFetch`, cada `fetch` que o app faz vira um log `http.client` com método, host, caminho (sem a query, e com trechos que parecem token mascarados), status e duração, ou o erro quando a chamada nem chega a responder. Dentro de uma requisição, o log entra na linha do tempo dela. Para os hosts de `propagateTo` (o nome exato, `.dominio` para os subdomínios ou uma RegExp), o SDK manda o `x-request-id` da requisição atual, e o Radar mostra a mesma requisição nos dois projetos. `traceFetch: true` registra as chamadas sem mandar o id para ninguém. Chamadas para o próprio Radar ficam de fora.
+
 ## Erros com o seu código
 
 Ligue no `tsconfig` para os erros mostrarem as linhas do TypeScript:

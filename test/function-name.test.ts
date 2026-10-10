@@ -48,4 +48,28 @@ describe('enclosingFunctionName on huge lines', () => {
     expect(enclosingFunctionName([noise, '  boom();', '};'], 2, 3)).toBe('data');
     expect(performance.now() - started).toBeLessThan(200);
   });
+
+  it('ignores braces and function words inside comments that span several lines', () => {
+    const source = [
+      '/**',
+      ' * Charges the card {',
+      ' *   function fakeName() {',
+      ' */',
+      'function chargeCard(order) {',
+      '  /* a block',
+      '     that spans lines } { */',
+      '  const url = "http://pay.dev/*"; // not a comment opener /*',
+      '  throw new Error("declined");',
+      '}',
+    ].join('\n');
+    expect(nameAt(source, 'throw new Error')).toBe('chargeCard');
+  });
+
+  it('does not take a slash-star inside a regular expression or a string spanning lines for a comment', () => {
+    const regex = ['const trim = (value) => value.replace(/\\/*$/, "");', 'function saveMeal(input) {', '  throw new Error("x");', '}'].join('\n');
+    expect(nameAt(regex, 'throw new Error')).toBe('saveMeal');
+    const template = ['const glob = `src/', '**/*.ts`;', 'function build() {', '  throw new Error("x");', '}'].join('\n');
+    expect(nameAt(template, 'throw new Error')).toBe('build');
+  });
 });
+

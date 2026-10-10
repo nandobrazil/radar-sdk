@@ -2,6 +2,9 @@ import type { LogLevel } from './protocol/index.js';
 
 export type RedactMode = 'mask' | 'none';
 export type RequestDetail = 'full' | 'route';
+export type FetchTraceTarget = string | RegExp;
+export type TraceFetchOption = boolean | { propagateTo?: FetchTraceTarget[] };
+export type ResolvedTraceFetch = { enabled: boolean; propagateTo: FetchTraceTarget[] };
 
 export type RadarOptions = {
   key?: string;
@@ -16,6 +19,7 @@ export type RadarOptions = {
   logRequests?: boolean;
   ignorePaths?: string[];
   captureUnhandled?: boolean;
+  traceFetch?: TraceFetchOption;
   debug?: boolean;
 };
 
@@ -32,12 +36,20 @@ export type ResolvedOptions = {
   logRequests: boolean;
   ignorePaths: string[];
   captureUnhandled: boolean;
+  traceFetch: ResolvedTraceFetch;
   debug: boolean;
 };
 
 export const DEFAULT_ENDPOINT = 'https://radar-ingest.oconde.dev';
 
 const LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
+
+function resolveTraceFetch(value: TraceFetchOption | undefined): ResolvedTraceFetch {
+  if (!value) return { enabled: false, propagateTo: [] };
+  if (value === true) return { enabled: true, propagateTo: [] };
+  const targets = Array.isArray(value.propagateTo) ? value.propagateTo : [];
+  return { enabled: true, propagateTo: targets.filter((target) => (typeof target === 'string' ? target.trim() !== '' : target instanceof RegExp)) };
+}
 
 export function resolveOptions(options: RadarOptions = {}, env: NodeJS.ProcessEnv = process.env): ResolvedOptions {
   const key = options.key?.trim() || undefined;
@@ -54,6 +66,7 @@ export function resolveOptions(options: RadarOptions = {}, env: NodeJS.ProcessEn
     logRequests: options.logRequests ?? true,
     ignorePaths: options.ignorePaths ?? ['/healthz', '/health'],
     captureUnhandled: options.captureUnhandled ?? true,
+    traceFetch: resolveTraceFetch(options.traceFetch),
     debug: options.debug ?? false,
   };
 }

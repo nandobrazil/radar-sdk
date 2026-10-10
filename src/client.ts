@@ -27,6 +27,7 @@ import { setFingerprintSecret } from './redact.js';
 import { prepareAttrs, truncate } from './serialize.js';
 import { enrichException, type EnrichOptions } from './source.js';
 import { exceptionInfo } from './stack.js';
+import { traceFetch } from './trace-fetch.js';
 import { Transport } from './transport.js';
 import { describeError, elapsedSince } from './util.js';
 import { SDK_NAME, SDK_VERSION } from './version.js';
@@ -56,6 +57,7 @@ export class RadarClient {
   private initialized = false;
   private closed = false;
   private readonly captured = new WeakSet<object>();
+  private restoreFetch: (() => void) | null = null;
 
   get isEnabled(): boolean {
     return this.transport !== null && !this.closed;
@@ -86,6 +88,14 @@ export class RadarClient {
         });
       }
       if (this.options.captureUnhandled && (this.transport || this.options.console)) installProcessHandlers(this);
+      if (this.options.traceFetch.enabled && (this.transport || this.options.console)) {
+        this.restoreFetch = traceFetch({
+          endpoint: this.options.endpoint,
+          propagateTo: this.options.traceFetch.propagateTo,
+          redact: this.options.redact,
+          record: (level, attrs) => this.safely(() => this.emitLog(level, 'http.client', attrs)),
+        });
+      }
     } catch (error) {
       this.debugWarn(`radar.init falhou: ${describeError(error)}`);
     }
@@ -238,6 +248,8 @@ export class RadarClient {
   async close(timeoutMs = 2000): Promise<void> {
     if (this.closed) return;
     await this.flush(timeoutMs);
+    this.restoreFetch?.();
+    this.restoreFetch = null;
     this.closed = true;
     this.transport?.stop();
   }

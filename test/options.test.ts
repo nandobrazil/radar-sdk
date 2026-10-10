@@ -17,6 +17,7 @@ describe('resolveOptions', () => {
       logRequests: true,
       ignorePaths: ['/healthz', '/health'],
       captureUnhandled: true,
+      traceFetch: { enabled: false, propagateTo: [] },
       debug: false,
     });
   });
@@ -45,4 +46,11 @@ describe('levelEnabled', () => {
     expect(levelEnabled('info', 'info')).toBe(true);
     expect(levelEnabled('error', 'warn')).toBe(true);
   });
+
+  it('turns traceFetch on with or without hosts to propagate to, and off by default', () => {
+    expect(resolveOptions({}, {}).traceFetch).toEqual({ enabled: false, propagateTo: [] });
+    expect(resolveOptions({ traceFetch: true }, {}).traceFetch).toEqual({ enabled: true, propagateTo: [] });
+    expect(resolveOptions({ traceFetch: { propagateTo: ['api.spinlab.dev', ' ', /\.oconde\.dev$/, 42 as unknown as string] } }, {}).traceFetch).toEqual({ enabled: true, propagateTo: ['api.spinlab.dev', /\.oconde\.dev$/] });
+  });
 });
+

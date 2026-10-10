@@ -31,7 +31,10 @@ export function requestPath(req: RequestLike): string {
 
 export function requestRoute(req: RequestLike, route?: string): string | undefined {
   if (route) return route;
-  return typeof req.route?.path === 'string' ? req.route.path : undefined;
+  if (typeof req.route?.path !== 'string') return undefined;
+  const base = typeof req.baseUrl === 'string' ? req.baseUrl.replace(/\/+$/, '') : '';
+  if (!base) return req.route.path;
+  return req.route.path === '/' ? base : `${base}${req.route.path}`;
 }
 
 const ROUTE_PARAM = /^:([A-Za-z_$][\w$]*)/;

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+### Novo
+
+- `traceFetch`: cada `fetch` de saída vira um log `http.client` com método, host, caminho (sem a query, com trechos que parecem segredo mascarados), status e duração, ou o erro com a causa (`fetch failed (ECONNREFUSED)`). Para os hosts de `propagateTo`, o SDK manda o `x-request-id` da requisição atual, sem trocar um que o app já tenha posto. Chamadas para o próprio Radar ficam de fora. Desligado por padrão.
+
+### Correções
+
+- O nome da função inferido do código original não se confunde mais com chaves e com a palavra `function` dentro de comentários de várias linhas (como os de JSDoc).
+
 ## 0.2.0
 
 ### Novo

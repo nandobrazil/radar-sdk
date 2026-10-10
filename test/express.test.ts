@@ -140,6 +140,32 @@ describe('middleware', () => {
     await minimal.close();
   });
 
+  it('reports the full route of routers mounted on a path', async () => {
+    const app = express();
+    app.use(client.middleware());
+    const orders = express.Router();
+    orders.get('/:id', (_req, res) => {
+      res.json({ ok: true });
+    });
+    orders.get('/', (_req, res) => {
+      res.json({ ok: true });
+    });
+    const users = express.Router();
+    users.get('/:id', (_req, res) => {
+      res.json({ ok: true });
+    });
+    app.use('/api/orders', orders);
+    app.use('/api/users', users);
+    await request(app).get('/api/orders/7').expect(200);
+    await request(app).get('/api/orders').expect(200);
+    await request(app).get('/api/users/9').expect(200);
+    await vi.waitFor(async () => {
+      await client.flush();
+      expect(logs().filter((item) => item.message === 'http.request')).toHaveLength(3);
+    });
+    expect(logs().filter((item) => item.message === 'http.request').map((item) => item.attrs?.route)).toEqual(['/api/orders/:id', '/api/orders', '/api/users/:id']);
+  });
+
   it('masks path secrets when an app-level error middleware reports the error', async () => {
     const app = express();
     app.use(client.middleware());
