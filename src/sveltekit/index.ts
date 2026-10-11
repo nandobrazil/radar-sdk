@@ -86,6 +86,13 @@ function withRequestId(response: Response, requestId: string): Response {
   }
 }
 
+function thrownStatus(error: unknown): number {
+  if (typeof error !== 'object' || error === null) return 500;
+  const status = (error as { status?: unknown }).status;
+  const fromKit = 'location' in error || 'body' in error;
+  return fromKit && typeof status === 'number' && Number.isInteger(status) && status >= 300 && status <= 599 ? status : 500;
+}
+
 export function radarHandle(options: RadarHandleOptions = {}): Handle {
   const client = options.client ?? radar;
   return async ({ event, resolve: resolveEvent }) => {
@@ -101,7 +108,7 @@ export function radarHandle(options: RadarHandleOptions = {}): Handle {
       try {
         response = await resolveEvent(event);
       } catch (error) {
-        if (client.shouldLogRequest(req)) client.logHttpRequest(context, 500);
+        if (client.shouldLogRequest(req)) client.logHttpRequest(context, thrownStatus(error));
         throw error;
       }
       const tagged = withRequestId(response, context.requestId);

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2
+
+### Correções
+
+- SvelteKit: um `redirect()` ou `error()` lançado por um hook depois do `radarHandle` (um portão de login, por exemplo) é registrado com o status que o visitante recebe (303, 404). Antes, o log `http.request` saía como 500, contando como erro no Desempenho e na meta de disponibilidade.
+
 ## 0.4.1
 
 ### Correções

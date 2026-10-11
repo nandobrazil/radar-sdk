@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
+import { error as httpError, redirect } from '@sveltejs/kit';
 import type { Handle, HandleServerError, RequestEvent, RequestHandler } from '@sveltejs/kit';
 import ts from 'typescript';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -86,6 +87,26 @@ describe('radarHandle', () => {
     expect(http!.level).toBe('info');
     expect(http!.attrs).toMatchObject({ method: 'GET', route: '/stores/[storeId]/reset/[token]', status: 201 });
     expect(JSON.stringify(server.events())).not.toContain('s3cr3t-reset-token');
+  });
+
+  it('logs the status of a redirect or an HTTP error thrown by a later hook, and 500 only for real failures', async () => {
+    const handle = radarHandle({ client });
+    await expect(handle({ event: requestEvent({ url: 'https://shop.test/dashboard', routeId: '/dashboard' }), resolve: async () => redirect(303, '/login') })).rejects.toMatchObject({ status: 303 });
+    await expect(handle({ event: requestEvent({ url: 'https://shop.test/missing', routeId: null }), resolve: async () => httpError(404, 'Not found') })).rejects.toMatchObject({ status: 404 });
+    await expect(
+      handle({
+        event: requestEvent({ url: 'https://shop.test/boom', routeId: '/boom' }),
+        resolve: async () => {
+          throw new Error('boom');
+        },
+      }),
+    ).rejects.toThrow('boom');
+    await client.flush();
+    expect(logs().filter((item) => item.message === 'http.request').map((item) => [item.attrs?.status, item.level])).toEqual([
+      [303, 'info'],
+      [404, 'warn'],
+      [500, 'error'],
+    ]);
   });
 
   it('uses the request id chosen by the app when one is provided', async () => {
