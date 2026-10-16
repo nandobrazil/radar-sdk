@@ -80,6 +80,20 @@ describe('RadarClient logs', () => {
     expect(JSON.parse(lines[0]!)).toMatchObject({ level: 'info', message: 'api listening', port: 8080 });
   });
 
+  it('prints query errors without their params', () => {
+    const written: string[] = [];
+    const out = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: unknown) => (written.push(String(chunk)), true)) as typeof process.stdout.write);
+    const err = vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => (written.push(String(chunk)), true)) as typeof process.stderr.write);
+    const local = new RadarClient();
+    local.init({ console: true, captureUnhandled: false });
+    local.captureError(new Error('Failed query: insert into "body_metrics" ("weight_kg") values ($1)\nparams: 82.5-SEGREDO'));
+    out.mockRestore();
+    err.mockRestore();
+    const printed = written.join('');
+    expect(printed).toContain('Failed query: insert into');
+    expect(printed).not.toContain('SEGREDO');
+  });
+
   it('never throws on bad input', () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;

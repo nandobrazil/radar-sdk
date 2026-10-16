@@ -114,3 +114,36 @@ describe('parseStack with hostile input', () => {
   });
 });
 
+
+describe('Drizzle query errors', () => {
+  const secret = 'PESO-82-KG-SEGREDO';
+
+  function queryError() {
+    const cause = Object.assign(new Error(`invalid input syntax for type uuid: "${secret}"`), { code: '22P02', table_name: 'meals', column_name: 'id' });
+    const error = new Error(`Failed query: select "id" from "meals" where "id" = $1\nparams: ${secret}`);
+    error.name = 'DrizzleQueryError';
+    (error as Error & { cause?: unknown }).cause = cause;
+    return error;
+  }
+
+  it('keeps the SQL and drops the params and the database message', () => {
+    const info = exceptionInfo(queryError());
+    expect(info.message).toBe('Failed query: select "id" from "meals" where "id" = $1');
+    expect(info.cause).toEqual({ type: 'Error', message: '[sqlstate 22P02 table meals column id]', frames: [] });
+    expect(JSON.stringify(info)).not.toContain(secret);
+  });
+
+  it('prints a stack without the params', async () => {
+    const { printableStack } = await import('../src/stack.js');
+    const printed = printableStack(queryError());
+    expect(printed).toContain('Failed query: select "id" from "meals" where "id" = $1');
+    expect(printed).toContain('    at ');
+    expect(printed).not.toContain(secret);
+  });
+
+  it('leaves other errors untouched', () => {
+    const error = new Error('Failed to fetch');
+    expect(exceptionInfo(error).message).toBe('Failed to fetch');
+    expect(exceptionInfo(error).cause).toBeUndefined();
+  });
+});

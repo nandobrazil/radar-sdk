@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.3
+
+### Correções
+
+- Erros de query do Drizzle (`Failed query: …`) não levam mais os valores da consulta: o `params:` da mensagem, que podia trazer dados de saúde ou de cadastro, sai tanto do evento enviado quanto do stack impresso no modo `console`. A causa (o erro do Postgres, que repete o valor recusado) vira só `[sqlstate … table … column … constraint …]`. O texto do SQL e os frames do stack continuam.
+
 ## 0.4.2
 
 ### Correções

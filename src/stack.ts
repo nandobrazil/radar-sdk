@@ -57,8 +57,41 @@ export function isInApp(file: string): boolean {
   return file.startsWith('/') || /^[A-Za-z]:[\\/]/.test(file);
 }
 
+const QUERY_FAILED = 'Failed query:';
+
+type DatabaseError = Error & { code?: unknown; table_name?: unknown; column_name?: unknown; constraint_name?: unknown };
+
+function databaseCause(cause: unknown): ExceptionInfo | undefined {
+  if (!(cause instanceof Error)) return undefined;
+  const { code, table_name: table, column_name: column, constraint_name: constraint } = cause as DatabaseError;
+  const parts = [
+    typeof code === 'string' ? `sqlstate ${code}` : undefined,
+    typeof table === 'string' && table ? `table ${table}` : undefined,
+    typeof column === 'string' && column ? `column ${column}` : undefined,
+    typeof constraint === 'string' && constraint ? `constraint ${constraint}` : undefined,
+  ].filter((part): part is string => part !== undefined);
+  return { type: errorType(cause), message: parts.length > 0 ? `[${parts.join(' ')}]` : '[detalhes omitidos]', frames: [] };
+}
+
+export function printableStack(error: Error): string | undefined {
+  const stack = error.stack;
+  if (!stack || !error.message.startsWith(QUERY_FAILED)) return stack;
+  const header = `${error.name}: ${error.message}`;
+  const frames = stack.startsWith(header) ? stack.slice(header.length) : '';
+  return `${error.name}: ${error.message.split('\nparams:')[0] ?? ''}${frames}`;
+}
+
+function withoutQueryValues(error: Error): ExceptionInfo | undefined {
+  if (!error.message.startsWith(QUERY_FAILED)) return undefined;
+  const query = error.message.split('\nparams:')[0] ?? '';
+  const cause = databaseCause((error as Error & { cause?: unknown }).cause);
+  return { type: errorType(error), message: truncate(query, LIMITS.messageLength), frames: parseStack(error.stack), ...(cause ? { cause } : {}) };
+}
+
 export function exceptionInfo(error: unknown, depth = 0): ExceptionInfo {
   if (error instanceof Error) {
+    const scrubbed = withoutQueryValues(error);
+    if (scrubbed) return scrubbed;
     const info: ExceptionInfo = {
       type: errorType(error),
       message: truncate(error.message ?? '', LIMITS.messageLength),

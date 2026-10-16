@@ -26,7 +26,7 @@ import { matchesRequest, pathParams, redactPath, requestInfo, requestPath, reque
 import { setFingerprintSecret } from './redact.js';
 import { prepareAttrs, truncate } from './serialize.js';
 import { enrichException, type EnrichOptions } from './source.js';
-import { exceptionInfo } from './stack.js';
+import { exceptionInfo, printableStack } from './stack.js';
 import { traceFetch } from './trace-fetch.js';
 import { Transport } from './transport.js';
 import { describeError, elapsedSince } from './util.js';
@@ -289,7 +289,7 @@ export class RadarClient {
       if (this.captured.has(error)) return;
       this.captured.add(error);
     }
-    this.emitException(exceptionInfo(error), { level, handled, ...(data !== undefined ? { attrs: data } : {}) }, error instanceof Error ? error.stack : undefined);
+    this.emitException(exceptionInfo(error), { level, handled, ...(data !== undefined ? { attrs: data } : {}) }, error instanceof Error ? printableStack(error) : undefined);
   }
 
   private emitException(exception: ExceptionInfo, options: CaptureExceptionOptions, stack?: string): void {
