@@ -159,6 +159,27 @@ Authorization: Bearer rk_<40 caracteres>
 
 `200 { "release", "firstSeen": iso | null, "newIssues": n, "events": n, "issues": [{ "title", "culprit", "count", "url" }] }`, com até 5 erros (mais ocorrências primeiro), só do projeto da chave. Serve para o pipeline de deploy olhar a release logo depois de publicar.
 
+## Tickets
+
+Bugs, melhorias, sugestões, feedbacks e dúvidas dos clientes do produto. O servidor do produto abre e responde com a chave do projeto; o cliente nunca usa a chave.
+
+```
+POST https://radar-ingest.oconde.dev/api/v1/tickets
+Authorization: Bearer rk_<40 caracteres>
+Content-Type: application/json
+
+{ "kind": "bug" | "improvement" | "suggestion" | "feedback" | "question", "title": string, "body": string,
+  "reporter"?: { "id"?: string, "name"?: string, "email"?: string }, "environment"?: string, "release"?: string, "attrs"?: object }
+```
+
+- `201 { "id", "number", "status": "open", "url" }`. `title` até 160 caracteres, `body` até 10 000, corpo inteiro até 32 KB, `attrs` até 20 chaves. `400 invalid_ticket` para corpo fora do formato.
+- `GET /api/v1/tickets?reporter=<id>&status=<open|answered|done|closed|all>&limit=<1-50>` → `200 { "tickets": [{ "id", "number", "kind", "status", "title", "messageCount", "lastMessageAt", "lastMessageBy", "createdAt" }] }`. `reporter` é obrigatório (`400 reporter_required`).
+- `GET /api/v1/tickets/<id>?reporter=<id>` → o ticket com `reporter: { id, name }` e `messages: [{ author: "reporter" | "member", authorName, body, createdAt }]`.
+- `POST /api/v1/tickets/<id>/messages?reporter=<id>` com `{ "body": string, "reporter"?: { "name"?: string } }` → `201 { "id", "number", "status" }`; a mensagem do cliente reabre o ticket (`open`).
+- Com `?reporter=`, um ticket de outro cliente responde `404`, igual a um ticket de outro projeto. O e-mail do cliente nunca volta nas respostas.
+- Estados: `open` (esperando a equipe), `answered` (esperando o cliente), `done`, `closed`. Quando a equipe responde e o ticket tem e-mail, o Radar manda a resposta para o cliente.
+- O SDK nunca lança e devolve `null` quando a chamada falha: `radar.createTicket(input)`, `radar.listTickets({ reporterId, status, limit })`, `radar.replyTicket(id, body, { id, name })`.
+
 ## Compatibilidade
 
 O v1 só cresce: campo opcional novo pode; mudar o significado, tornar obrigatório ou remover não pode. O servidor ignora campos desconhecidos. Mudança que quebra vira `/api/v2/events`, com o v1 mantido.

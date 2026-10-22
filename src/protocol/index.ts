@@ -6,6 +6,12 @@ export const CHECKIN_PATH = '/api/v1/checkins/';
 
 export const RELEASES_PATH = '/api/v1/releases/';
 
+export const TICKETS_PATH = '/api/v1/tickets';
+
+export const TICKET_KINDS = ['bug', 'improvement', 'suggestion', 'feedback', 'question'] as const;
+
+export const TICKET_STATUSES = ['open', 'answered', 'done', 'closed'] as const;
+
 export const CHECKIN_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 export const CHECKIN_STATUSES = ['in_progress', 'ok', 'error'] as const;
@@ -129,6 +135,36 @@ export type CheckInPayload = {
   durationMs?: number;
   environment?: string;
   release?: string;
+};
+
+export type TicketKind = (typeof TICKET_KINDS)[number];
+
+export type TicketStatus = (typeof TICKET_STATUSES)[number];
+
+export type TicketReporter = { id?: string; name?: string; email?: string };
+
+export type CreateTicketInput = {
+  kind: TicketKind;
+  title: string;
+  body: string;
+  reporter?: TicketReporter;
+  attrs?: Record<string, unknown>;
+};
+
+export type CreatedTicket = { id: string; number: number; status: TicketStatus; url: string };
+
+export type TicketReply = { id: string; number: number; status: TicketStatus };
+
+export type TicketSummary = {
+  id: string;
+  number: number;
+  kind: TicketKind;
+  status: TicketStatus;
+  title: string;
+  messageCount: number;
+  lastMessageAt: string;
+  lastMessageBy: 'reporter' | 'member';
+  createdAt: string;
 };
 
 export type ReleaseSummary = {

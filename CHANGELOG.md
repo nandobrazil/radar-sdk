@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+### Novidades
+
+- Tickets: `radar.createTicket({ kind, title, body, reporter, attrs })` abre um ticket (bug, melhoria, sugestão, feedback ou dúvida) no projeto da chave, com o ambiente e a release do cliente, e devolve `{ id, number, status, url }`. `radar.listTickets({ reporterId, status, limit })` e `radar.replyTicket(id, body, { id, name })` mostram e continuam a conversa de um cliente dentro do produto. Os três nunca lançam: devolvem `null` quando o Radar recusa ou não responde, e uma chave recusada pausa os envios como no resto do SDK. Precisa do Radar com tickets (outubro de 2026).
+
 ## 0.4.3
 
 ### Correções

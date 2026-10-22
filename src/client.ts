@@ -11,8 +11,17 @@ import {
   CHECKIN_STATUSES,
   INGEST_PATH,
   LIMITS,
+  TICKET_KINDS,
+  TICKET_STATUSES,
+  TICKETS_PATH,
   type CheckInPayload,
   type CheckInStatus,
+  type CreatedTicket,
+  type CreateTicketInput,
+  type TicketReply,
+  type TicketReporter,
+  type TicketStatus,
+  type TicketSummary,
   type ErrorEvent,
   type ExceptionInfo,
   type LogEvent,
@@ -35,6 +44,7 @@ import { SDK_NAME, SDK_VERSION } from './version.js';
 export type Attributes = Record<string, unknown>;
 export type LogRequestOptions = { level?: LogLevel; redact?: RedactMode };
 export type CheckInOptions = { checkInId?: string; durationMs?: number };
+export type ListTicketsOptions = { reporterId: string; status?: TicketStatus | 'all'; limit?: number };
 
 type LogExtras = { request?: RequestInfo; mode?: RedactMode };
 
@@ -190,6 +200,57 @@ export class RadarClient {
       await this.transport.checkIn(slug, payload);
     } catch (error) {
       this.debugWarn(`check-in falhou: ${describeError(error)}`);
+    }
+  }
+
+  async createTicket(input: CreateTicketInput): Promise<CreatedTicket | null> {
+    try {
+      if (!this.transport || this.closed) return null;
+      if (!input || !TICKET_KINDS.includes(input.kind) || typeof input.title !== 'string' || typeof input.body !== 'string') {
+        this.debugWarn('ticket inválido: kind, title e body são obrigatórios');
+        return null;
+      }
+      const environment = this.options.environment.slice(0, 64) || 'production';
+      const release = this.options.release?.slice(0, 128);
+      const body = {
+        kind: input.kind,
+        title: input.title,
+        body: input.body,
+        ...(input.reporter ? { reporter: input.reporter } : {}),
+        ...(input.attrs ? { attrs: input.attrs } : {}),
+        environment,
+        ...(release ? { release } : {}),
+      };
+      return await this.transport.requestJson<CreatedTicket>(this.options.endpoint + TICKETS_PATH, { method: 'POST', body });
+    } catch (error) {
+      this.debugWarn(`ticket não aberto: ${describeError(error)}`);
+      return null;
+    }
+  }
+
+  async replyTicket(id: string, body: string, reporter?: Pick<TicketReporter, 'id' | 'name'>): Promise<TicketReply | null> {
+    try {
+      if (!this.transport || this.closed || typeof id !== 'string' || !id || typeof body !== 'string') return null;
+      const query = reporter?.id ? `?${new URLSearchParams({ reporter: reporter.id })}` : '';
+      const payload = { body, ...(reporter?.name ? { reporter: { name: reporter.name } } : {}) };
+      return await this.transport.requestJson<TicketReply>(`${this.options.endpoint}${TICKETS_PATH}/${encodeURIComponent(id)}/messages${query}`, { method: 'POST', body: payload });
+    } catch (error) {
+      this.debugWarn(`resposta ao ticket não enviada: ${describeError(error)}`);
+      return null;
+    }
+  }
+
+  async listTickets(options: ListTicketsOptions): Promise<TicketSummary[] | null> {
+    try {
+      if (!this.transport || this.closed || !options?.reporterId) return null;
+      const params = new URLSearchParams({ reporter: options.reporterId });
+      if (options.status && (options.status === 'all' || TICKET_STATUSES.includes(options.status))) params.set('status', options.status);
+      if (options.limit) params.set('limit', String(Math.max(1, Math.min(50, Math.floor(options.limit)))));
+      const result = await this.transport.requestJson<{ tickets: TicketSummary[] }>(`${this.options.endpoint}${TICKETS_PATH}?${params}`, { method: 'GET' });
+      return result?.tickets ?? null;
+    } catch (error) {
+      this.debugWarn(`tickets não listados: ${describeError(error)}`);
+      return null;
     }
   }
 

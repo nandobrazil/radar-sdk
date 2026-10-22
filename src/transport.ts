@@ -183,6 +183,32 @@ export class Transport {
     this.warn(`checkin_rejected_${response.status}`, `check-in recusado pelo Radar (${response.status})`, false);
   }
 
+  async requestJson<T>(url: string, init: { method: 'GET' | 'POST'; body?: unknown }): Promise<T | null> {
+    if (this.stopped || Date.now() < this.unauthorizedUntil) return null;
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: init.method,
+        headers: this.headers(),
+        ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
+        redirect: 'error',
+        signal: AbortSignal.timeout(this.config.requestTimeoutMs ?? 5000),
+      });
+    } catch (error) {
+      this.warn('ticket_network', `chamada de tickets ao Radar falhou: ${describeError(error)}`, false);
+      return null;
+    }
+    const payload = (await response.json().catch(() => null)) as T | { error?: { code?: string; message?: string } } | null;
+    if (response.ok) return payload as T;
+    if (response.status === 401 || response.status === 403) {
+      this.pauseUnauthorized(response.status);
+      return null;
+    }
+    const reason = payload && typeof payload === 'object' && 'error' in payload && payload.error?.message ? `: ${payload.error.message}` : '';
+    this.warn(`ticket_rejected_${response.status}`, `chamada de tickets recusada pelo Radar (${response.status})${reason}`, response.status === 400 || response.status === 404);
+    return null;
+  }
+
   private pauseUnauthorized(status: number): void {
     this.droppedCount += this.queue.length;
     this.queue = [];
