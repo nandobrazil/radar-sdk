@@ -167,6 +167,10 @@ export type TicketSummary = {
   createdAt: string;
 };
 
+export type TicketMessage = { author: 'reporter' | 'member'; authorName: string | null; body: string; createdAt: string };
+
+export type TicketDetail = TicketSummary & { reporter: { id: string | null; name: string | null }; messages: TicketMessage[] };
+
 export type ReleaseSummary = {
   release: string;
   firstSeen: string | null;

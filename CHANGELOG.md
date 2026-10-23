@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+### Novidades
+
+- `radar.getTicket(id, { reporterId })` traz um ticket com a conversa inteira (`messages` com autor, nome, texto e data) para o produto mostrar "Meus chamados". Com `reporterId`, um ticket de outro cliente devolve `null`, como um ticket que não existe. Nunca lança.
+
 ## 0.5.0
 
 ### Novidades

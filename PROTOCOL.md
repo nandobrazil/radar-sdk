@@ -178,7 +178,7 @@ Content-Type: application/json
 - `POST /api/v1/tickets/<id>/messages?reporter=<id>` com `{ "body": string, "reporter"?: { "name"?: string } }` → `201 { "id", "number", "status" }`; a mensagem do cliente reabre o ticket (`open`).
 - Com `?reporter=`, um ticket de outro cliente responde `404`, igual a um ticket de outro projeto. O e-mail do cliente nunca volta nas respostas.
 - Estados: `open` (esperando a equipe), `answered` (esperando o cliente), `done`, `closed`. Quando a equipe responde e o ticket tem e-mail, o Radar manda a resposta para o cliente.
-- O SDK nunca lança e devolve `null` quando a chamada falha: `radar.createTicket(input)`, `radar.listTickets({ reporterId, status, limit })`, `radar.replyTicket(id, body, { id, name })`.
+- O SDK nunca lança e devolve `null` quando a chamada falha: `radar.createTicket(input)`, `radar.listTickets({ reporterId, status, limit })`, `radar.getTicket(id, { reporterId })`, `radar.replyTicket(id, body, { id, name })`.
 
 ## Compatibilidade
 

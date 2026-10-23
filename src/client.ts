@@ -21,6 +21,7 @@ import {
   type TicketReply,
   type TicketReporter,
   type TicketStatus,
+  type TicketDetail,
   type TicketSummary,
   type ErrorEvent,
   type ExceptionInfo,
@@ -45,6 +46,8 @@ export type Attributes = Record<string, unknown>;
 export type LogRequestOptions = { level?: LogLevel; redact?: RedactMode };
 export type CheckInOptions = { checkInId?: string; durationMs?: number };
 export type ListTicketsOptions = { reporterId: string; status?: TicketStatus | 'all'; limit?: number };
+
+export type GetTicketOptions = { reporterId?: string };
 
 type LogExtras = { request?: RequestInfo; mode?: RedactMode };
 
@@ -250,6 +253,17 @@ export class RadarClient {
       return result?.tickets ?? null;
     } catch (error) {
       this.debugWarn(`tickets não listados: ${describeError(error)}`);
+      return null;
+    }
+  }
+
+  async getTicket(id: string, options?: GetTicketOptions): Promise<TicketDetail | null> {
+    try {
+      if (!this.transport || this.closed || typeof id !== 'string' || !id) return null;
+      const query = options?.reporterId ? `?${new URLSearchParams({ reporter: options.reporterId })}` : '';
+      return await this.transport.requestJson<TicketDetail>(`${this.options.endpoint}${TICKETS_PATH}/${encodeURIComponent(id)}${query}`, { method: 'GET' });
+    } catch (error) {
+      this.debugWarn(`ticket não lido: ${describeError(error)}`);
       return null;
     }
   }

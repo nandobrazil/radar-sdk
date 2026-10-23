@@ -110,7 +110,7 @@ const ticket = await radar.createTicket({
 });
 ```
 
-Bugs, melhorias, sugestões, feedbacks e dúvidas que o cliente envia pelo produto viram tickets no Radar, numerados por projeto. A equipe responde pelo painel, e o cliente recebe a resposta por e-mail quando o ticket tem o e-mail dele. Para mostrar "Meus chamados" no produto, `radar.listTickets({ reporterId })` lista os tickets de um cliente e `radar.replyTicket(id, body, { id, name })` manda a resposta dele, que reabre o ticket. Os três métodos rodam no servidor (a chave nunca vai para o navegador), nunca lançam e devolvem `null` quando o Radar não responde. Detalhes em [Tickets](https://radar.oconde.dev/docs/sdk/tickets/).
+Bugs, melhorias, sugestões, feedbacks e dúvidas que o cliente envia pelo produto viram tickets no Radar, numerados por projeto. A equipe responde pelo painel, e o cliente recebe a resposta por e-mail quando o ticket tem o e-mail dele. Para mostrar "Meus chamados" no produto, `radar.listTickets({ reporterId })` lista os tickets de um cliente, `radar.getTicket(id, { reporterId })` traz a conversa de um deles e `radar.replyTicket(id, body, { id, name })` manda a resposta dele, que reabre o ticket. Os métodos rodam no servidor (a chave nunca vai para o navegador), nunca lançam e devolvem `null` quando o Radar não responde. Detalhes em [Tickets](https://radar.oconde.dev/docs/sdk/tickets/).
 
 ## Chamadas para outros serviços
 

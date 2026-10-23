@@ -43,18 +43,26 @@ describe('tickets', () => {
     await expect(disabled.createTicket({ kind: 'bug', title: 'x', body: 'y' })).resolves.toBeNull();
   });
 
-  it('lists the tickets of one customer and answers as that customer', async () => {
-    const { client, tickets } = await setup((request) =>
-      request.method === 'GET'
-        ? { status: 200, body: { tickets: [{ id: 't1', number: 7, kind: 'bug', status: 'answered', title: 'Botão', messageCount: 2, lastMessageAt: '2026-10-22T12:00:00.000Z', lastMessageBy: 'member', createdAt: '2026-10-22T11:00:00.000Z' }] } }
-        : { status: 201, body: { id: 't1', number: 7, status: 'open' } },
-    );
+  it('lists the tickets of one customer, reads one and answers as that customer', async () => {
+    const summary = { id: 't1', number: 7, kind: 'bug', status: 'answered', title: 'Botão', messageCount: 2, lastMessageAt: '2026-10-22T12:00:00.000Z', lastMessageBy: 'member', createdAt: '2026-10-22T11:00:00.000Z' };
+    const messages = [{ author: 'reporter', authorName: 'Ana', body: 'Cliquei e nada', createdAt: '2026-10-22T11:00:00.000Z' }, { author: 'member', authorName: 'Equipe', body: 'Corrigido', createdAt: '2026-10-22T12:00:00.000Z' }];
+    const { client, tickets } = await setup((request) => {
+      if (request.method === 'POST') return { status: 201, body: { id: 't1', number: 7, status: 'open' } };
+      if (request.path.startsWith('/api/v1/tickets/t1')) return { status: 200, body: { ...summary, reporter: { id: 'u 1', name: 'Ana' }, messages } };
+      if (request.path.startsWith('/api/v1/tickets/t2')) return { status: 404, body: { error: { code: 'not_found', message: 'x' } } };
+      return { status: 200, body: { tickets: [summary] } };
+    });
     const list = await client.listTickets({ reporterId: 'u 1', status: 'answered', limit: 5 });
     expect(list?.map((ticket) => [ticket.number, ticket.status])).toEqual([[7, 'answered']]);
+    const detail = await client.getTicket('t1', { reporterId: 'u 1' });
+    expect(detail?.messages.map((message) => [message.author, message.body])).toEqual([['reporter', 'Cliquei e nada'], ['member', 'Corrigido']]);
+    await expect(client.getTicket('t2', { reporterId: 'u 1' })).resolves.toBeNull();
     const replied = await client.replyTicket('t1', 'Ainda acontece', { id: 'u 1', name: 'Ana' });
     expect(replied).toEqual({ id: 't1', number: 7, status: 'open' });
     expect(tickets().map((request) => [request.method, request.path, request.body])).toEqual([
       ['GET', '/api/v1/tickets?reporter=u+1&status=answered&limit=5', null],
+      ['GET', '/api/v1/tickets/t1?reporter=u+1', null],
+      ['GET', '/api/v1/tickets/t2?reporter=u+1', null],
       ['POST', '/api/v1/tickets/t1/messages?reporter=u+1', { body: 'Ainda acontece', reporter: { name: 'Ana' } }],
     ]);
   });
